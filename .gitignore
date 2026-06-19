@@ -1,0 +1,59 @@
+# Gradle
+.gradle/
+gradle/wrapper/gradle-wrapper.jar
+build/
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+*.apk
+*.ap_
+*.dex
+*.class
+*.jar
+local.properties
+.DS_Store
+proguard-mapping.txt
+
+# Kotlin
+.kotlin/
+*.kexe
+*.klib
+
+# Build outputs
+app/build/
+app/release/
+*.apk
+*.aab
+
+# Local development
+local.properties
+keystore.properties
+debug.keystore
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+*.swp
+*.swo
+*~
+.classpath
+.project
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Misc
+*.log
+.env
+.env.local

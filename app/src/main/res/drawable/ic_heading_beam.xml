@@ -1,0 +1,20 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="56dp"
+    android:height="48dp"
+    android:viewportWidth="56"
+    android:viewportHeight="48">
+    <!-- Cone with apex at bottom-center (the user's location), fanning up (north). -->
+    <path android:pathData="M28,48 L4,10 Q28,-2 52,10 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="28"
+                android:startY="48"
+                android:endX="28"
+                android:endY="6"
+                android:startColor="#AA4285F4"
+                android:endColor="#004285F4" />
+        </aapt:attr>
+    </path>
+</vector>
