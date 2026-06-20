@@ -2,10 +2,14 @@ package com.adsbdroid.settings
 
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.adsbdroid.location.UserLocation
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -53,6 +57,29 @@ class SettingsRepository(context: Context) {
         ds.edit { it[KEY_SHOW_CONE] = show }
     }
 
+    /** Persists the most recent GPS fix so it survives process restarts. */
+    suspend fun saveLastLocation(loc: UserLocation) {
+        ds.edit { p ->
+            p[KEY_LOC_LAT] = loc.lat
+            p[KEY_LOC_LON] = loc.lon
+            p[KEY_LOC_ALT] = loc.altitudeMeters
+            p[KEY_LOC_ACC] = loc.accuracyMeters
+        }
+    }
+
+    /** Returns the last persisted location, or null if none was ever saved. */
+    suspend fun loadLastLocation(): UserLocation? {
+        val p = ds.data.firstOrNull() ?: return null
+        val lat = p[KEY_LOC_LAT] ?: return null
+        val lon = p[KEY_LOC_LON] ?: return null
+        return UserLocation(
+            lat = lat,
+            lon = lon,
+            altitudeMeters = p[KEY_LOC_ALT] ?: 0.0,
+            accuracyMeters = p[KEY_LOC_ACC] ?: Float.NaN,
+        )
+    }
+
     private companion object {
         val KEY_SPEED = stringPreferencesKey("speed_unit")
         val KEY_ALT = stringPreferencesKey("altitude_unit")
@@ -60,5 +87,10 @@ class SettingsRepository(context: Context) {
         val KEY_MAP_TYPE = stringPreferencesKey("map_type")
         val KEY_SHOW_AIRCRAFT = booleanPreferencesKey("show_aircraft")
         val KEY_SHOW_CONE = booleanPreferencesKey("show_heading_cone")
+        // Last known GPS fix
+        val KEY_LOC_LAT = doublePreferencesKey("loc_lat")
+        val KEY_LOC_LON = doublePreferencesKey("loc_lon")
+        val KEY_LOC_ALT = doublePreferencesKey("loc_alt")
+        val KEY_LOC_ACC = floatPreferencesKey("loc_acc")
     }
 }

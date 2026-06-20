@@ -1,23 +1,33 @@
 package com.adsbdroid.ui.sky
 
+import android.content.Intent
 import android.os.SystemClock
+import android.provider.Settings
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.GpsOff
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
@@ -26,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -42,6 +53,10 @@ import com.adsbdroid.sensors.DeviceOrientation
 import com.adsbdroid.settings.Formatters
 import com.adsbdroid.ui.PollStatus
 import com.adsbdroid.ui.SkyUiState
+import com.adsbdroid.ui.theme.HudAmber
+import com.adsbdroid.ui.theme.HudBorder
+import com.adsbdroid.ui.theme.HudCyan
+import com.adsbdroid.ui.theme.HudSurface
 import java.util.Date
 import kotlin.math.roundToInt
 
@@ -81,24 +96,37 @@ fun ArSkyScreen(
             modifier = Modifier.fillMaxSize(),
         )
 
-        StatusBar(
-            state = state,
+        // Top bar: status pill + settings button in a single Row so they never overlap.
+        Row(
             modifier = Modifier
-                .align(Alignment.TopCenter)
+                .align(Alignment.TopStart)
+                .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(16.dp),
-        )
-
-        IconButton(
-            onClick = onOpenSettings,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(8.dp)
-                .clip(CircleShape)
-                .background(Color.Black.copy(alpha = 0.35f)),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = Color.White)
+            StatusBar(state = state, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(6.dp))
+            IconButton(
+                onClick = onOpenSettings,
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .border(1.dp, HudBorder, RoundedCornerShape(10.dp))
+                    .background(HudSurface),
+            ) {
+                Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = HudCyan)
+            }
+        }
+
+        // Stale-location nudge: shown when we're using a cached fix, not live GPS.
+        if (state.locationIsStale) {
+            StaleLocationBanner(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(top = 72.dp, start = 12.dp, end = 12.dp),
+            )
         }
 
         if (state.selectedHex == null) {
@@ -107,7 +135,8 @@ fun ArSkyScreen(
                     .align(Alignment.BottomStart)
                     .windowInsetsPadding(WindowInsets.safeDrawing)
                     .padding(16.dp)
-                    .clip(RoundedCornerShape(14.dp)),
+                    .clip(RoundedCornerShape(14.dp))
+                    .border(1.dp, HudBorder, RoundedCornerShape(14.dp)),
             ) {
                 miniMap()
             }
@@ -131,6 +160,8 @@ fun ArSkyScreen(
             PlaneGraphsPanel(
                 title = title,
                 subtitle = subtitle,
+                details = state.details,
+                detailsLoading = state.detailsLoading,
                 samples = state.history,
                 prefs = state.prefs,
                 loading = state.historyLoading,
@@ -150,14 +181,13 @@ fun ArSkyScreen(
  * last update succeeded, red when it failed.
  */
 @Composable
-private fun UpdateTimerDonut(poll: PollStatus, modifier: Modifier = Modifier) {
+internal fun UpdateTimerDonut(poll: PollStatus, modifier: Modifier = Modifier) {
     val progress = remember { Animatable(0f) }
     LaunchedEffect(poll.updatedAtMs, poll.periodMs) {
         if (poll.periodMs <= 0L) {
             progress.snapTo(1f)
             return@LaunchedEffect
         }
-        // The state may reach us a little after the update; resume mid-cycle.
         val elapsed = (SystemClock.elapsedRealtime() - poll.updatedAtMs).coerceAtLeast(0L)
         val remaining = (poll.periodMs - elapsed).coerceAtLeast(0L)
         progress.snapTo((elapsed.toFloat() / poll.periodMs).coerceIn(0f, 1f))
@@ -175,7 +205,8 @@ private fun UpdateTimerDonut(poll: PollStatus, modifier: Modifier = Modifier) {
         modifier = modifier
             .size(36.dp)
             .clip(CircleShape)
-            .background(Color.Black.copy(alpha = 0.4f)),
+            .border(1.dp, HudBorder, CircleShape)
+            .background(HudSurface),
     ) {
         Canvas(modifier = Modifier.fillMaxSize().padding(6.dp)) {
             val stroke = 4.dp.toPx()
@@ -207,8 +238,8 @@ private fun UpdateTimerDonut(poll: PollStatus, modifier: Modifier = Modifier) {
 @Composable
 private fun StatusBar(state: SkyUiState, modifier: Modifier = Modifier) {
     Surface(
-        modifier = modifier,
-        color = Color.Black.copy(alpha = 0.4f),
+        modifier = modifier.border(1.dp, HudBorder, RoundedCornerShape(12.dp)),
+        color = HudSurface,
         contentColor = Color.White,
         shape = RoundedCornerShape(12.dp),
     ) {
@@ -216,29 +247,76 @@ private fun StatusBar(state: SkyUiState, modifier: Modifier = Modifier) {
             val heading = compass(state.orientation.azimuthDeg)
             val clock = Formatters.clock(Date(), state.prefs.timeFormat)
             Text(
-                text = "$clock   |   $heading   |   ${state.planes.size} planes",
-                color = Color.White,
-                fontSize = 15.sp,
+                text = "$clock   |   $heading   |   ${state.planes.size} PLANES",
+                color = HudCyan,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = FontFamily.Monospace,
             )
             val loc = state.location
-            Text(
-                text = when {
-                    loc == null -> "Acquiring GPS\u2026"
-                    else -> "%.4f, %.4f".format(loc.lat, loc.lon)
-                },
-                color = Color.White.copy(alpha = 0.75f),
-                fontSize = 12.sp,
-                fontFamily = FontFamily.Monospace,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val (locText, locColor) = when {
+                    loc == null -> "ACQUIRING GPS\u2026" to Color.White.copy(alpha = 0.45f)
+                    state.locationIsStale -> "LAST KNOWN  %.4f, %.4f".format(loc.lat, loc.lon) to HudAmber.copy(alpha = 0.8f)
+                    else -> "%.4f, %.4f".format(loc.lat, loc.lon) to Color.White.copy(alpha = 0.65f)
+                }
+                if (loc != null && !state.locationIsStale) {
+                    Icon(
+                        imageVector = Icons.Filled.GpsFixed,
+                        contentDescription = null,
+                        tint = Color(0xFF4CAF50),
+                        modifier = Modifier.size(10.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                }
+                Text(
+                    text = locText,
+                    color = locColor,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
             if (!state.sensorAvailable) {
-                Text("No rotation sensor on this device", color = Color(0xFFFF6B6B), fontSize = 12.sp)
+                Text("NO ROTATION SENSOR", color = Color(0xFFFF6B6B), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
             }
             state.error?.let {
-                Text(it, color = Color(0xFFFFC857), fontSize = 12.sp)
+                Text(it.uppercase(), color = HudAmber, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
             }
         }
+    }
+}
+
+@Composable
+private fun StaleLocationBanner(modifier: Modifier = Modifier) {
+    val ctx = LocalContext.current
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .border(1.dp, HudAmber.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+            .background(Color(0xCC1A1200))
+            .clickable {
+                ctx.startActivity(
+                    Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.GpsOff,
+            contentDescription = null,
+            tint = HudAmber,
+            modifier = Modifier.size(14.dp),
+        )
+        Text(
+            text = "LAST KNOWN LOCATION — TAP TO ENABLE GPS",
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.SemiBold,
+            color = HudAmber,
+        )
     }
 }
 
@@ -261,7 +339,6 @@ private fun SyntheticSky(orientation: DeviceOrientation, modifier: Modifier = Mo
                 1f to Color(0xFF1E3A52),
             )
         )
-        // Horizon shifts down as you tilt up toward the sky.
         val horizonY = (h / 2f) + (orientation.elevationDeg / 50f) * (h / 2f)
         if (horizonY in 0f..h) {
             drawLine(

@@ -42,27 +42,39 @@ fun headingMarker(map: MapView, point: GeoPoint, azimuthDeg: Float): Marker =
         setOnMarkerClickListener { _, _ -> false }
     }
 
-fun planeMarker(map: MapView, plane: TrackedPlane, prefs: UserPrefs, iconScale: Float = 1f): Marker =
-    Marker(map).apply {
-        position = GeoPoint(plane.lat, plane.lon)
-        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+fun planeMarker(
+    map: MapView,
+    plane: TrackedPlane,
+    prefs: UserPrefs,
+    iconScale: Float = 1f,
+    onSelect: ((String) -> Unit)? = null,
+): Marker = Marker(map).apply {
+    position = GeoPoint(plane.lat, plane.lon)
+    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
 
-        val sizeClass = PlaneSize.classify(plane.aircraft.category)
-        val dp = markerSizeDp(sizeClass, plane.aircraft.altitudeMeters) * iconScale
-        icon = scaledPlaneIcon(map.context, sizeClass.colorArgb.toInt(), dp)
+    val sizeClass = PlaneSize.classify(plane.aircraft.category)
+    val dp = markerSizeDp(sizeClass, plane.aircraft.altitudeMeters) * iconScale
+    icon = scaledPlaneIcon(map.context, sizeClass.colorArgb.toInt(), dp)
 
-        // Flat markers rotate with the map; osmdroid rotates the canvas by
-        // -rotation (clockwise positive), so negate the heading to point the nose
-        // along the true compass bearing.
-        isFlat = true
-        plane.aircraft.headingDeg?.let { rotation = (-it).toFloat() }
+    isFlat = true
+    plane.aircraft.headingDeg?.let { rotation = (-it).toFloat() }
 
-        val flag = plane.country?.flag?.let { "$it " } ?: ""
-        title = "$flag${plane.aircraft.callsign}"
-        snippet = Formatters.altitude(plane.aircraft.altitudeMeters, prefs.altitudeUnit) +
-            "  \u00B7  " + Formatters.speed(plane.aircraft.groundSpeedKnots, prefs.speedUnit) +
-            "  \u00B7  " + Formatters.distanceKm(plane.sky.slantDistanceMeters)
+    // Suppress the default osmdroid info bubble; taps route to the details panel.
+    setInfoWindow(null)
+    if (onSelect != null) {
+        val hex = plane.aircraft.hex
+        setOnMarkerClickListener { _, _ ->
+            onSelect(hex)
+            true
+        }
     }
+
+    val flag = plane.country?.flag?.let { "$it " } ?: ""
+    title = "$flag${plane.aircraft.callsign}"
+    snippet = Formatters.altitude(plane.aircraft.altitudeMeters, prefs.altitudeUnit) +
+        "  \u00B7  " + Formatters.speed(plane.aircraft.groundSpeedKnots, prefs.speedUnit) +
+        "  \u00B7  " + Formatters.distanceKm(plane.sky.slantDistanceMeters)
+}
 
 /**
  * Marker size in dp, scaled by aircraft size class and altitude (higher and

@@ -18,7 +18,12 @@ class PlaneMarkerLayer(
     private val markers = HashMap<String, Marker>()
     private var lastPrefs: UserPrefs? = null
 
-    fun sync(planes: List<TrackedPlane>, prefs: UserPrefs, cap: Int = Int.MAX_VALUE) {
+    fun sync(
+        planes: List<TrackedPlane>,
+        prefs: UserPrefs,
+        cap: Int = Int.MAX_VALUE,
+        onSelect: ((String) -> Unit)? = null,
+    ) {
         val prefsChanged = prefs != lastPrefs
         lastPrefs = prefs
         val seen = HashSet<String>()
@@ -29,7 +34,7 @@ class PlaneMarkerLayer(
             val existing = markers[hex]
             val marker = if (existing == null || prefsChanged) {
                 existing?.let { map.overlays.remove(it) }
-                planeMarker(map, p, prefs, iconScale).also {
+                planeMarker(map, p, prefs, iconScale, onSelect).also {
                     markers[hex] = it
                     map.overlays.add(it)
                 }

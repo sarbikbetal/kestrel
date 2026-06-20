@@ -30,7 +30,7 @@ class AircraftRepository(
     fun stream(
         intervalMs: Long = 8_000L,
         maxBackoffMs: Long = 60_000L,
-        radiusNm: Int = 100,
+        radiusNm: Int = 150,
         locationProvider: () -> Pair<Double, Double>?,
     ): Flow<AircraftResult> = flow {
         // Grows on 429 (rate limit) and resets to [intervalMs] after a clean fetch.

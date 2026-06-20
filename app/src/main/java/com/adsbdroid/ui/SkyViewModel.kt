@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.adsbdroid.data.Aircraft
 import com.adsbdroid.data.AircraftRepository
 import com.adsbdroid.data.AircraftResult
+import com.adsbdroid.data.FlightDetails
+import com.adsbdroid.data.RouteRepository
 import com.adsbdroid.data.TraceRepository
 import com.adsbdroid.data.TrackSample
 import com.adsbdroid.domain.CountryFlags
@@ -57,6 +59,11 @@ data class PollStatus(
 
 data class SkyUiState(
     val location: UserLocation? = null,
+    /**
+     * True when [location] is sourced from the last persisted GPS fix rather than
+     * a live hardware update. The UI uses this to nudge the user to enable GPS.
+     */
+    val locationIsStale: Boolean = false,
     val orientation: DeviceOrientation = DeviceOrientation(0f, 0f, 0f),
     val planes: List<TrackedPlane> = emptyList(),
     val sensorAvailable: Boolean = true,
@@ -69,6 +76,10 @@ data class SkyUiState(
     val history: List<TrackSample> = emptyList(),
     val historyLoading: Boolean = false,
     val historyError: String? = null,
+    /** Enriched airline + route details for the selected plane. */
+    val details: FlightDetails? = null,
+    val detailsLoading: Boolean = false,
+    val detailsError: String? = null,
 )
 
 class SkyViewModel(app: Application) : AndroidViewModel(app) {
@@ -77,10 +88,14 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
     private val orientationProvider = OrientationProvider(app)
     private val repository = AircraftRepository()
     private val traceRepository = TraceRepository()
+    private val routeRepository = RouteRepository()
     private val settingsRepository = SettingsRepository(app)
 
     private val _location = MutableStateFlow<UserLocation?>(null)
     val location: StateFlow<UserLocation?> = _location.asStateFlow()
+
+    /** True once a live hardware GPS fix has been received in this session. */
+    private val _locationIsLive = MutableStateFlow(false)
 
     private val _orientation = MutableStateFlow(DeviceOrientation(0f, 0f, 0f))
     private val _snapshot = MutableStateFlow(Snapshot(emptyList(), 0L))
@@ -88,6 +103,7 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
     private val _pollStatus = MutableStateFlow(PollStatus())
     private val _selectedHex = MutableStateFlow<String?>(null)
     private val _trace = MutableStateFlow(TraceState())
+    private val _route = MutableStateFlow(RouteState())
 
     private var locationJob: Job? = null
 
@@ -167,8 +183,8 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
 
     // Bundles the less-frequent signals so the main combine stays within 5 flows.
     private val misc: Flow<Misc> =
-        combine(_error, _pollStatus, _trace) { err, poll, trace ->
-            Misc(error = err, poll = poll, trace = trace)
+        combine(_error, _pollStatus, _trace, _route, _locationIsLive) { err, poll, trace, route, live ->
+            Misc(error = err, poll = poll, trace = trace, route = route, locationIsLive = live)
         }
 
     val uiState: StateFlow<SkyUiState> =
@@ -181,6 +197,7 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
         ) { loc, orient, planes, m, prefs ->
             SkyUiState(
                 location = loc,
+                locationIsStale = loc != null && !m.locationIsLive,
                 orientation = orient,
                 planes = planes,
                 sensorAvailable = orientationProvider.isAvailable,
@@ -191,10 +208,23 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
                 history = m.trace.samples,
                 historyLoading = m.trace.loading,
                 historyError = m.trace.error,
+                details = m.route.details,
+                detailsLoading = m.route.loading,
+                detailsError = m.route.error,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SkyUiState())
 
     init {
+        // Seed location from the last persisted fix so planes are visible immediately,
+        // even before the hardware GPS locks on. Cleared to "live" once real fixes arrive.
+        viewModelScope.launch {
+            val cached = settingsRepository.loadLastLocation()
+            if (cached != null && _location.value == null) {
+                _location.value = cached
+                // _locationIsLive stays false → UI shows the stale nudge
+            }
+        }
+
         if (orientationProvider.isAvailable) {
             viewModelScope.launch {
                 orientationProvider.stream().collect { _orientation.value = it }
@@ -221,14 +251,29 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
 
-        // Fetch the selected plane's trace, then refresh it while it stays selected.
+        // Fetch the selected plane's trace + route, then refresh trace while selected.
         viewModelScope.launch {
             _selectedHex.collectLatest { hex ->
                 if (hex == null) {
                     _trace.value = TraceState()
+                    _route.value = RouteState()
                     return@collectLatest
                 }
                 _trace.value = TraceState(hex = hex, loading = true)
+                _route.value = RouteState(loading = true)
+
+                // Route is one-shot per callsign (cached with 10-min TTL).
+                val plane = _snapshot.value.planes.firstOrNull { it.hex == hex }
+                if (plane != null) {
+                    routeRepository.fetch(plane.callsign, hex, plane.lat, plane.lon).fold(
+                        onSuccess = { details -> _route.value = RouteState(details = details) },
+                        onFailure = { e -> _route.value = RouteState(error = e.message) },
+                    )
+                } else {
+                    _route.value = RouteState()
+                }
+
+                // Trace refreshes every 30 s while the plane stays selected.
                 while (true) {
                     traceRepository.fetch(hex).fold(
                         onSuccess = { samples ->
@@ -272,7 +317,12 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
         if (locationJob != null) return
         locationJob = viewModelScope.launch {
             try {
-                locationProvider.stream().collect { _location.value = it }
+                locationProvider.stream().collect { loc ->
+                    _location.value = loc
+                    _locationIsLive.value = true
+                    // Persist so the next cold start has a starting point.
+                    settingsRepository.saveLastLocation(loc)
+                }
             } catch (e: SecurityException) {
                 _error.value = "Location permission missing"
             }
@@ -290,11 +340,20 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
         val error: String? = null,
     )
 
+    /** Route/airline fetch state for the currently selected plane. */
+    private data class RouteState(
+        val loading: Boolean = false,
+        val details: FlightDetails? = null,
+        val error: String? = null,
+    )
+
     /** Low-frequency signals bundled together to keep the main combine ≤ 5 flows. */
     private data class Misc(
         val error: String?,
         val poll: PollStatus,
         val trace: TraceState,
+        val route: RouteState,
+        val locationIsLive: Boolean,
     )
 
     companion object {
