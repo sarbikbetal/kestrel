@@ -56,10 +56,14 @@ class RouteRepository(
                 originIcao   = originApt?.icao ?: routePair?.first,
                 originName   = originApt?.name,
                 originCity   = originApt?.city,
+                originLat    = originApt?.lat,
+                originLon    = originApt?.lon,
                 destIata     = destApt?.iata,
                 destIcao     = destApt?.icao ?: routePair?.second,
                 destName     = destApt?.name,
                 destCity     = destApt?.city,
+                destLat      = destApt?.lat,
+                destLon      = destApt?.lon,
             )
             cache[callsign] = CacheEntry(details, now)
             details
@@ -73,6 +77,8 @@ class RouteRepository(
         val icao: String?,
         val name: String?,
         val city: String?,
+        val lat: Double?,
+        val lon: Double?,
     )
 
     private data class AircraftInfo(val operator: String?, val fullType: String?)
@@ -124,6 +130,8 @@ class RouteRepository(
                 icao = obj["icao"]?.jsonPrimitive?.content?.takeIf { it.isNotEmpty() },
                 name = obj["name"]?.jsonPrimitive?.content?.takeIf { it.isNotEmpty() },
                 city = obj["location"]?.jsonPrimitive?.content?.takeIf { it.isNotEmpty() },
+                lat = obj["lat"]?.jsonPrimitive?.content?.toDoubleOrNull(),
+                lon = obj["lon"]?.jsonPrimitive?.content?.toDoubleOrNull(),
             )
         } catch (e: Exception) { null }
     }

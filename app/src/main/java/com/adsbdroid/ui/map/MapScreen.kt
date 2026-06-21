@@ -189,16 +189,10 @@ fun MapScreen(
         // Details panel when a plane is selected
         if (selectedHex != null) {
             val selected = planes.firstOrNull { it.aircraft.hex == selectedHex }
-            val flag = selected?.country?.flag?.let { "$it " } ?: ""
-            val title = flag + (selected?.aircraft?.callsign ?: selectedHex)
-            val subtitle = listOfNotNull(
-                selected?.aircraft?.type,
-                selected?.aircraft?.registration,
-            ).joinToString("  \u00B7  ").ifEmpty { null }
 
             PlaneGraphsPanel(
-                title = title,
-                subtitle = subtitle,
+                selected = selected,
+                fallbackTitle = selectedHex,
                 details = details,
                 detailsLoading = detailsLoading,
                 samples = history,

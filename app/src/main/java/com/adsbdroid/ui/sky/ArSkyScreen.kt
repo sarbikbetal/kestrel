@@ -150,16 +150,10 @@ fun ArSkyScreen(
             )
         } else {
             val selected = state.planes.firstOrNull { it.aircraft.hex == state.selectedHex }
-            val flag = selected?.country?.flag?.let { "$it " } ?: ""
-            val title = flag + (selected?.aircraft?.callsign ?: state.selectedHex)
-            val subtitle = listOfNotNull(
-                selected?.aircraft?.type,
-                selected?.aircraft?.registration,
-            ).joinToString("  \u00B7  ").ifEmpty { null }
 
             PlaneGraphsPanel(
-                title = title,
-                subtitle = subtitle,
+                selected = selected,
+                fallbackTitle = state.selectedHex ?: "",
                 details = state.details,
                 detailsLoading = state.detailsLoading,
                 samples = state.history,

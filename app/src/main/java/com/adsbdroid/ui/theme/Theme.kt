@@ -19,6 +19,16 @@ val HudSurface = Color(0xCC0D1B2A)
 /** Subtle cyan border used on HUD elements. */
 val HudBorder = Color(0x5035E1D2)
 
+// --- Solid panel surfaces shared by the flight-details card and Settings ---
+/** Near-opaque panel background for full cards (details panel, settings cards). */
+val PanelBg = Color(0xF20C141D)
+/** Slightly lighter inset surface for rows/cells inside a panel. */
+val PanelRow = Color(0xFF16222E)
+/** Hairline divider/border inside panels. */
+val PanelBorder = Color(0x1AFFFFFF)
+/** Dimmed secondary text. */
+val HudTextDim = Color(0xFF8A9AA8)
+
 private val Ink = Color(0xFFE6EDF3)
 
 private val DarkColors = darkColorScheme(
