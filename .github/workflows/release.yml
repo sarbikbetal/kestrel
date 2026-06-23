@@ -13,13 +13,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0          # needed so gh can list all release tags
 
       # ── Java ────────────────────────────────────────────────────────────────
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -69,19 +69,19 @@ jobs:
           echo "${SDK_ROOT}/platform-tools"            >> "$GITHUB_PATH"
 
       # ── Build ────────────────────────────────────────────────────────────────
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+      - name: Build release APK
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
 
       # ── Package ──────────────────────────────────────────────────────────────
       - name: Rename APK
         run: |
           APK_NAME="Kestrel-${{ steps.semver.outputs.tag }}.apk"
-          cp app/build/outputs/apk/debug/app-debug.apk "${APK_NAME}"
+          cp app/build/outputs/apk/release/app-release-unsigned.apk "${APK_NAME}"
           echo "apk_name=${APK_NAME}" >> "$GITHUB_ENV"
 
       # ── Release ──────────────────────────────────────────────────────────────
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.semver.outputs.tag }}
           name: "Kestrel ${{ steps.semver.outputs.tag }}"

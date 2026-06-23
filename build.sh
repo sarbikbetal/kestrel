@@ -10,13 +10,22 @@ APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
 
 # Parse flags
 INSTALL=true
+TASK="assembleDebug"
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         --build-only) INSTALL=false ;;
+        --release) TASK="assembleRelease" ;;
+        --bundle) TASK="bundleRelease"; INSTALL=false ;;
         *) echo "Unknown flag: $1"; exit 1 ;;
     esac
     shift
 done
+
+if [ "$TASK" = "assembleRelease" ]; then
+    APK_PATH="app/build/outputs/apk/release/app-release-unsigned.apk"
+elif [ "$TASK" = "bundleRelease" ]; then
+    APK_PATH="app/build/outputs/bundle/release/app-release.aab"
+fi
 
 echo "▶ Building APK inside Docker..."
 docker run --rm \
@@ -25,7 +34,7 @@ docker run --rm \
     -v "$GRADLE_CACHE:/root/.gradle" \
     -v "$ANDROID_HOME_CACHE:/root/.android" \
     "$IMAGE" \
-    ./gradlew assembleDebug
+    ./gradlew $TASK
 
 if [ "$INSTALL" = true ]; then
     echo ""
