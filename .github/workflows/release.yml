@@ -76,7 +76,7 @@ jobs:
       - name: Rename APK
         run: |
           APK_NAME="Kestrel-${{ steps.semver.outputs.tag }}.apk"
-          cp app/build/outputs/apk/release/app-release-unsigned.apk "${APK_NAME}"
+          cp app/build/outputs/apk/release/app-release.apk "${APK_NAME}"
           echo "apk_name=${APK_NAME}" >> "$GITHUB_ENV"
 
       # ── Release ──────────────────────────────────────────────────────────────

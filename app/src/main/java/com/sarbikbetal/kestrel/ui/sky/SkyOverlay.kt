@@ -4,6 +4,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -24,7 +25,6 @@ import com.sarbikbetal.kestrel.sensors.DeviceOrientation
 import com.sarbikbetal.kestrel.settings.Formatters
 import com.sarbikbetal.kestrel.settings.UserPrefs
 import com.sarbikbetal.kestrel.ui.TrackedPlane
-import com.sarbikbetal.kestrel.ui.theme.HudCyan
 import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.math.max
@@ -42,12 +42,6 @@ private const val NEAR_M = 4_000.0
 private const val FAR_M = 70_000.0
 private const val MIN_SCALE = 1.1f
 private const val MAX_SCALE = 2.8f
-
-private val PlaneStroke = Color(0xFF0B1622)
-private val TagBg = Color(0xE00D1B2A)
-private val TitleColor = Color(0xFFFFFFFF)
-private val SubColor = Color(0xFFB9C6D2)
-private val HintColor = Color(0xFFFFC857)
 
 /** Axis-aligned rect used for label tap tests. */
 private data class TagRect(val l: Float, val t: Float, val r: Float, val b: Float) {
@@ -74,29 +68,37 @@ fun SkyOverlay(
     onSelect: (String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+    val planeStroke = colorScheme.surface
+    val tagBg = colorScheme.surfaceContainerHigh.copy(alpha = 0.94f)
+    val titleColor = colorScheme.onSurface
+    val subColor = colorScheme.onSurfaceVariant
+    val hintColor = colorScheme.tertiary
+    val selectionRing = colorScheme.primary
+
     val hitTargets = remember { mutableListOf<PlaneHit>() }
-    val titlePaint = remember {
+    val titlePaint = remember(titleColor) {
         Paint().apply {
             isAntiAlias = true
-            color = TitleColor.toArgb()
+            color = titleColor.toArgb()
             textSize = 30f
-            typeface = Typeface.MONOSPACE
+            typeface = Typeface.DEFAULT_BOLD
         }
     }
-    val subPaint = remember {
+    val subPaint = remember(subColor) {
         Paint().apply {
             isAntiAlias = true
-            color = SubColor.toArgb()
+            color = subColor.toArgb()
             textSize = 24f
-            typeface = Typeface.MONOSPACE
+            typeface = Typeface.DEFAULT
         }
     }
-    val distPaint = remember {
+    val distPaint = remember(subColor) {
         Paint().apply {
             isAntiAlias = true
-            color = Color(0xFF6A7F8E).toArgb()
+            color = subColor.copy(alpha = 0.75f).toArgb()
             textSize = 21f
-            typeface = Typeface.MONOSPACE
+            typeface = Typeface.DEFAULT
         }
     }
 
@@ -136,7 +138,7 @@ fun SkyOverlay(
                 val scale = distanceScale(tracked.sky.slantDistanceMeters)
 
                 if (tracked.aircraft.hex == selectedHex) {
-                    drawCircle(HudCyan, radius = 28f * scale, center = pos, style = Stroke(2f))
+                    drawCircle(selectionRing, radius = 28f * scale, center = pos, style = Stroke(3f))
                 }
 
                 val ahead = tracked.skyAhead
@@ -159,7 +161,7 @@ fun SkyOverlay(
                     } else null
                 }
                 if (screenRot != null) {
-                    drawPlaneIcon(pos, screenRot, color, scale)
+                    drawPlaneIcon(pos, screenRot, color, scale, planeStroke)
                 } else {
                     drawCircle(color, radius = 9f * scale, center = pos)
                 }
@@ -169,7 +171,7 @@ fun SkyOverlay(
                 val sub = Formatters.altitude(tracked.aircraft.altitudeMeters, prefs.altitudeUnit) +
                     "  " + Formatters.speed(tracked.aircraft.groundSpeedKnots, prefs.speedUnit)
                 val dist = formatDistKm(tracked.sky.slantDistanceMeters)
-                val tag = drawTag(pos, title, sub, dist, color, titlePaint, subPaint, distPaint)
+                val tag = drawTag(pos, title, sub, dist, color, tagBg, titlePaint, subPaint, distPaint)
                 hitTargets.add(
                     PlaneHit(
                         hex = tracked.aircraft.hex,
@@ -179,7 +181,7 @@ fun SkyOverlay(
                     )
                 )
             } else if (hintsDrawn < 6) {
-                drawOffScreenHint(center, proj.bearingFromCenterDeg, min(w, h))
+                drawOffScreenHint(center, proj.bearingFromCenterDeg, min(w, h), hintColor)
                 hintsDrawn++
             }
         }
@@ -198,7 +200,7 @@ private fun distanceScale(slantMeters: Double): Float {
     return (MAX_SCALE + (MIN_SCALE - MAX_SCALE) * t).toFloat()
 }
 
-private fun DrawScope.drawPlaneIcon(pos: Offset, rotationDeg: Float, color: Color, scale: Float = 1.1f) {
+private fun DrawScope.drawPlaneIcon(pos: Offset, rotationDeg: Float, color: Color, scale: Float = 1.1f, stroke: Color) {
     val pts = listOf(
         0f to -16f, 2f to -6f, 2f to 0f, 15f to 8f, 15f to 11f, 2f to 7f, 2f to 12f,
         7f to 16f, 7f to 18f, 0f to 15f, -7f to 18f, -7f to 16f, -2f to 12f, -2f to 7f,
@@ -214,21 +216,17 @@ private fun DrawScope.drawPlaneIcon(pos: Offset, rotationDeg: Float, color: Colo
     }
     rotate(degrees = rotationDeg, pivot = pos) {
         drawPath(path, color)
-        drawPath(path, PlaneStroke, style = Stroke(2f))
+        drawPath(path, stroke, style = Stroke(2f))
     }
 }
 
-/**
- * Draws a sci-fi tag beside [iconPos] and returns its bounding [TagRect] for
- * hit-testing. Uses a translucent dark background + corner bracket ticks instead
- * of a solid border to preserve the HUD aesthetic.
- */
 private fun DrawScope.drawTag(
     iconPos: Offset,
     title: String,
     sub: String,
     dist: String,
     accent: Color,
+    background: Color,
     titlePaint: Paint,
     subPaint: Paint,
     distPaint: Paint,
@@ -246,49 +244,31 @@ private fun DrawScope.drawTag(
     val left = iconPos.x + 24f
     val top = iconPos.y - boxH / 2f
 
-    // Background
     drawRoundRect(
-        color = TagBg,
+        color = background,
         topLeft = Offset(left, top),
         size = Size(boxW, boxH),
-        cornerRadius = CornerRadius(10f, 10f),
+        cornerRadius = CornerRadius(16f, 16f),
     )
 
-    // Sci-fi corner ticks instead of a full border
-    val tick = 10f
-    val lw = 1.5f
-    val tl = Offset(left, top)
-    val tr = Offset(left + boxW, top)
-    val bl = Offset(left, top + boxH)
-    val br = Offset(left + boxW, top + boxH)
-    val ac = accent.copy(alpha = 0.8f)
-    // top-left
-    drawLine(ac, tl, Offset(tl.x + tick, tl.y), lw)
-    drawLine(ac, tl, Offset(tl.x, tl.y + tick), lw)
-    // top-right
-    drawLine(ac, tr, Offset(tr.x - tick, tr.y), lw)
-    drawLine(ac, tr, Offset(tr.x, tr.y + tick), lw)
-    // bottom-left
-    drawLine(ac, bl, Offset(bl.x + tick, bl.y), lw)
-    drawLine(ac, bl, Offset(bl.x, bl.y - tick), lw)
-    // bottom-right
-    drawLine(ac, br, Offset(br.x - tick, br.y), lw)
-    drawLine(ac, br, Offset(br.x, br.y - tick), lw)
-
-    // Left accent bar
-    drawLine(accent.copy(alpha = 0.5f), Offset(left, top + 4f), Offset(left, top + boxH - 4f), 2f)
+    drawLine(
+        accent.copy(alpha = 0.85f),
+        Offset(left, top + 4f),
+        Offset(left, top + boxH - 4f),
+        3f,
+    )
 
     drawContext.canvas.nativeCanvas.let { canvas ->
         val textX = left + padX
         canvas.drawText(title, textX, top + padY + titleH - 4f, titlePaint)
-        canvas.drawText(sub,   textX, top + padY + titleH + gap + subH - 2f, subPaint)
-        canvas.drawText(dist,  textX, top + padY + titleH + gap + subH + gap + distH - 2f, distPaint)
+        canvas.drawText(sub, textX, top + padY + titleH + gap + subH - 2f, subPaint)
+        canvas.drawText(dist, textX, top + padY + titleH + gap + subH + gap + distH - 2f, distPaint)
     }
 
     return TagRect(left, top, left + boxW, top + boxH)
 }
 
-private fun DrawScope.drawOffScreenHint(center: Offset, bearingDeg: Float, span: Float) {
+private fun DrawScope.drawOffScreenHint(center: Offset, bearingDeg: Float, span: Float, color: Color) {
     val radius = span * 0.42f
     rotate(degrees = bearingDeg, pivot = center) {
         val tip = Offset(center.x, center.y - radius)
@@ -300,6 +280,6 @@ private fun DrawScope.drawOffScreenHint(center: Offset, bearingDeg: Float, span:
             lineTo(rp.x, rp.y)
             close()
         }
-        drawPath(path, HintColor.copy(alpha = 0.85f))
+        drawPath(path, color.copy(alpha = 0.9f))
     }
 }

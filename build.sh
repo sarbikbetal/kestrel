@@ -22,7 +22,7 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 if [ "$TASK" = "assembleRelease" ]; then
-    APK_PATH="app/build/outputs/apk/release/app-release-unsigned.apk"
+    APK_PATH="app/build/outputs/apk/release/app-release.apk"
 elif [ "$TASK" = "bundleRelease" ]; then
     APK_PATH="app/build/outputs/bundle/release/app-release.aab"
 fi

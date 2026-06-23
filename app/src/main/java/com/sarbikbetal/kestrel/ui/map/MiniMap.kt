@@ -1,15 +1,16 @@
 package com.sarbikbetal.kestrel.ui.map
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.OpenInFull
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -18,8 +19,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -32,7 +31,6 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 
 private const val MINIMAP_PLANE_CAP = 40
-// Match the ViewModel render cadence so smoothed positions glide instead of stepping.
 private const val MINIMAP_REFRESH_MS = 100L
 
 /** Small, non-interactive map in the corner. Tapping it opens the full map. */
@@ -69,8 +67,6 @@ fun MiniMap(
         mapView.invalidate()
     }
 
-    // Update marker positions in place at a smooth cadence, reading the latest
-    // inputs so we don't restart the loop on every recomposition.
     val curLocation by rememberUpdatedState(location)
     val curAzimuth by rememberUpdatedState(azimuthDeg)
     val curPlanes by rememberUpdatedState(planes)
@@ -104,20 +100,24 @@ fun MiniMap(
         }
     }
 
-    Box(
-        modifier = modifier
-            .size(120.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .border(1.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(14.dp)),
+    Card(
+        modifier = modifier.size(128.dp),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
-        // Transparent layer on top intercepts taps so the map itself stays static.
-        Box(modifier = Modifier.fillMaxSize().clickable(onClick = onClick))
-        Icon(
-            imageVector = Icons.Filled.OpenInFull,
-            contentDescription = "Open map",
-            tint = Color.White,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).size(18.dp),
-        )
+        Box(modifier = Modifier.fillMaxSize()) {
+            AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
+            Box(modifier = Modifier.fillMaxSize().clickable(onClick = onClick))
+            Icon(
+                imageVector = Icons.Filled.OpenInFull,
+                contentDescription = "Open map",
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(8.dp)
+                    .size(20.dp),
+            )
+        }
     }
 }

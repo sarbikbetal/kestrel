@@ -1,16 +1,34 @@
 package com.sarbikbetal.kestrel.ui
 
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.sarbikbetal.kestrel.ui.map.MapScreen
 import com.sarbikbetal.kestrel.ui.map.MiniMap
 import com.sarbikbetal.kestrel.ui.settings.SettingsScreen
 import com.sarbikbetal.kestrel.ui.settings.SettingsViewModel
 import com.sarbikbetal.kestrel.ui.sky.ArSkyScreen
+import com.sarbikbetal.kestrel.ui.sky.PlaneDetailBottomSheet
 
 object Routes {
     const val SKY = "sky"
@@ -18,6 +36,7 @@ object Routes {
     const val SETTINGS = "settings"
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppNav(
     viewModel: SkyViewModel,
@@ -26,52 +45,129 @@ fun AppNav(
 ) {
     val nav = rememberNavController()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val showBottomBar = state.selectedHex == null
 
-    NavHost(navController = nav, startDestination = Routes.SKY) {
-        composable(Routes.SKY) {
-            ArSkyScreen(
-                state = state,
-                hasCameraPermission = hasCameraPermission,
-                onOpenSettings = { nav.navigate(Routes.SETTINGS) },
-                onSelectPlane = viewModel::selectPlane,
-                miniMap = {
-                    MiniMap(
-                        location = state.location,
-                        azimuthDeg = state.orientation.azimuthDeg,
-                        prefs = state.prefs,
-                        planes = state.planes,
-                        onClick = { nav.navigate(Routes.MAP) },
+    Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            if (showBottomBar) {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                ) {
+                    val navBackStackEntry by nav.currentBackStackEntryAsState()
+                    val currentDestination = navBackStackEntry?.destination
+
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Filled.CameraAlt, contentDescription = "AR Sky") },
+                        label = { Text("AR Sky") },
+                        selected = currentDestination?.hierarchy?.any { it.route == Routes.SKY } == true,
+                        onClick = {
+                            nav.navigate(Routes.SKY) {
+                                popUpTo(nav.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
                     )
-                },
-            )
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Filled.Map, contentDescription = "Map") },
+                        label = { Text("Map") },
+                        selected = currentDestination?.hierarchy?.any { it.route == Routes.MAP } == true,
+                        onClick = {
+                            nav.navigate(Routes.MAP) {
+                                popUpTo(nav.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                    )
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings") },
+                        label = { Text("Settings") },
+                        selected = currentDestination?.hierarchy?.any { it.route == Routes.SETTINGS } == true,
+                        onClick = {
+                            nav.navigate(Routes.SETTINGS) {
+                                popUpTo(nav.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                    )
+                }
+            }
+        },
+    ) { innerPadding ->
+        NavHost(
+            navController = nav,
+            startDestination = Routes.SKY,
+            modifier = Modifier.padding(innerPadding),
+        ) {
+            composable(Routes.SKY) {
+                ArSkyScreen(
+                    state = state,
+                    hasCameraPermission = hasCameraPermission,
+                    onSelectPlane = viewModel::selectPlane,
+                    miniMap = {
+                        MiniMap(
+                            location = state.location,
+                            azimuthDeg = state.orientation.azimuthDeg,
+                            prefs = state.prefs,
+                            planes = state.planes,
+                            onClick = {
+                                nav.navigate(Routes.MAP) {
+                                    popUpTo(nav.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                        )
+                    },
+                )
+            }
+            composable(Routes.MAP) {
+                MapScreen(
+                    location = state.location,
+                    planes = state.planes,
+                    prefs = state.prefs,
+                    azimuthDeg = state.orientation.azimuthDeg,
+                    onSelectPlane = viewModel::selectPlane,
+                    onSetMapType = settingsViewModel::setMapType,
+                    onToggleAircraft = settingsViewModel::setShowAircraft,
+                    onToggleHeadingCone = settingsViewModel::setShowHeadingCone,
+                )
+            }
+            composable(Routes.SETTINGS) {
+                val prefs by settingsViewModel.prefs.collectAsStateWithLifecycle()
+                SettingsScreen(
+                    prefs = prefs,
+                    onSpeedUnit = settingsViewModel::setSpeedUnit,
+                    onAltitudeUnit = settingsViewModel::setAltitudeUnit,
+                    onTimeFormat = settingsViewModel::setTimeFormat,
+                )
+            }
         }
-        composable(Routes.MAP) {
-            MapScreen(
-                location = state.location,
-                planes = state.planes,
-                prefs = state.prefs,
-                azimuthDeg = state.orientation.azimuthDeg,
-                selectedHex = state.selectedHex,
-                history = state.history,
+
+        state.selectedHex?.let { hex ->
+            val selected = state.planes.firstOrNull { it.aircraft.hex == hex }
+            PlaneDetailBottomSheet(
+                selected = selected,
+                fallbackTitle = hex,
                 details = state.details,
                 detailsLoading = state.detailsLoading,
-                historyLoading = state.historyLoading,
-                historyError = state.historyError,
-                onSelectPlane = viewModel::selectPlane,
-                onSetMapType = settingsViewModel::setMapType,
-                onToggleAircraft = settingsViewModel::setShowAircraft,
-                onToggleHeadingCone = settingsViewModel::setShowHeadingCone,
-                onBack = { nav.popBackStack() },
-            )
-        }
-        composable(Routes.SETTINGS) {
-            val prefs by settingsViewModel.prefs.collectAsStateWithLifecycle()
-            SettingsScreen(
-                prefs = prefs,
-                onSpeedUnit = settingsViewModel::setSpeedUnit,
-                onAltitudeUnit = settingsViewModel::setAltitudeUnit,
-                onTimeFormat = settingsViewModel::setTimeFormat,
-                onBack = { nav.popBackStack() },
+                samples = state.history,
+                prefs = state.prefs,
+                loading = state.historyLoading,
+                error = state.historyError,
+                onDismiss = { viewModel.selectPlane(null) },
             )
         }
     }
