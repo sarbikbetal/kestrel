@@ -1,0 +1,89 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+
+# Allow creating tags and releases, writing release assets
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # needed so gh can list all release tags
+
+      # ── Java ────────────────────────────────────────────────────────────────
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle            # caches ~/.gradle between runs
+
+      # ── Versioning ──────────────────────────────────────────────────────────
+      - name: Compute next semver patch
+        id: semver
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          latest=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || true)
+          if [[ -z "$latest" || "$latest" == "null" ]]; then
+            latest="v0.0.0"
+          fi
+          version="${latest#v}"
+          IFS='.' read -r major minor patch <<< "$version"
+          new_tag="v${major}.${minor}.$((patch + 1))"
+          echo "tag=${new_tag}" >> "$GITHUB_OUTPUT"
+          echo "Next release: ${new_tag}"
+
+      # ── Android SDK ─────────────────────────────────────────────────────────
+      # Use the same cmdline-tools zip as the Dockerfile so SDK 37 is available.
+      - name: Install Android SDK 37
+        run: |
+          CMDTOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+          SDK_ROOT="${HOME}/android-sdk"
+
+          mkdir -p "${SDK_ROOT}/cmdline-tools"
+          curl -sSfL "${CMDTOOLS_URL}" -o /tmp/cmdtools.zip
+          unzip -q /tmp/cmdtools.zip -d /tmp
+          mv /tmp/cmdline-tools "${SDK_ROOT}/cmdline-tools/latest"
+          rm /tmp/cmdtools.zip
+
+          SDKMANAGER="${SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+
+          yes | "${SDKMANAGER}" --sdk_root="${SDK_ROOT}" --licenses > /dev/null 2>&1 || true
+          "${SDKMANAGER}" --sdk_root="${SDK_ROOT}" \
+            "platforms;android-37.0" \
+            "build-tools;37.0.0"   \
+            "platform-tools"
+
+          # Expose to subsequent steps
+          echo "ANDROID_HOME=${SDK_ROOT}"     >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=${SDK_ROOT}" >> "$GITHUB_ENV"
+          echo "${SDK_ROOT}/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "${SDK_ROOT}/platform-tools"            >> "$GITHUB_PATH"
+
+      # ── Build ────────────────────────────────────────────────────────────────
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      # ── Package ──────────────────────────────────────────────────────────────
+      - name: Rename APK
+        run: |
+          APK_NAME="Kestrel-${{ steps.semver.outputs.tag }}.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "${APK_NAME}"
+          echo "apk_name=${APK_NAME}" >> "$GITHUB_ENV"
+
+      # ── Release ──────────────────────────────────────────────────────────────
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.semver.outputs.tag }}
+          name: "Kestrel ${{ steps.semver.outputs.tag }}"
+          generate_release_notes: true   # auto-fills body from merged PRs / commits
+          files: ${{ env.apk_name }}
