@@ -2,10 +2,10 @@
 set -e
 
 IMAGE="android-builder"
-GRADLE_CACHE="adsb-droid-gradle-cache"
+GRADLE_CACHE="kestrel-gradle-cache"
 # Persists the auto-generated debug.keystore so every build is signed with the
 # same key (otherwise installs fail with INSTALL_FAILED_UPDATE_INCOMPATIBLE).
-ANDROID_HOME_CACHE="adsb-droid-android-home"
+ANDROID_HOME_CACHE="kestrel-android-home"
 APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
 
 # Parse flags

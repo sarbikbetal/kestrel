@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "adsb-droid"
+rootProject.name = "kestrel"
 include(":app")

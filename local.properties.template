@@ -1,0 +1,16 @@
+## Copy this file to local.properties and set sdk.dir to your Android SDK location.
+## local.properties is machine-specific and must not be committed.
+##
+## Android Studio sets this automatically when you open the project.
+## For command-line builds outside Docker, set it manually:
+##
+## macOS (typical):
+##   sdk.dir=/Users/<your-username>/Library/Android/sdk
+##
+## Linux (typical):
+##   sdk.dir=/home/<your-username>/Android/Sdk
+##
+## Windows (typical):
+##   sdk.dir=C\:\\Users\\<your-username>\\AppData\\Local\\Android\\Sdk
+
+sdk.dir=/Users/YOUR_USERNAME/Library/Android/sdk

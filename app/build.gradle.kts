@@ -13,13 +13,13 @@ kotlin {
 }
 
 android {
-    namespace = "com.adsbdroid"
+    namespace = "com.sarbikbetal.kestrel"
     compileSdk = 37
     compileSdkMinor = 0
     buildToolsVersion = "37.0.0"
 
     defaultConfig {
-        applicationId = "com.adsbdroid"
+        applicationId = "com.sarbikbetal.kestrel"
         minSdk = 26
         targetSdk = 37
         versionCode = 1

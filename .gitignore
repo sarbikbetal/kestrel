@@ -1,6 +1,5 @@
 # Gradle
 .gradle/
-gradle/wrapper/gradle-wrapper.jar
 build/
 
 # Android Studio / IntelliJ IDEA
@@ -13,6 +12,8 @@ build/
 *.dex
 *.class
 *.jar
+# Keep the Gradle wrapper bootstrap jar — required by both gradlew and Android Studio
+!gradle/wrapper/gradle-wrapper.jar
 local.properties
 .DS_Store
 proguard-mapping.txt
