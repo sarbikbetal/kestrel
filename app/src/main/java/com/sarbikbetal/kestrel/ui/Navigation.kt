@@ -43,6 +43,7 @@ fun AppNav(
     viewModel: SkyViewModel,
     settingsViewModel: SettingsViewModel,
     hasCameraPermission: Boolean,
+    onRequestCameraPermission: () -> Unit,
 ) {
     val nav = rememberNavController()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -119,12 +120,13 @@ fun AppNav(
                     onToggleSkyView = {
                         val next = if (skyPrefs.skyViewMode == SkyViewMode.CAMERA) SkyViewMode.SYNTHETIC else SkyViewMode.CAMERA
                         settingsViewModel.setSkyViewMode(next)
+                        if (next == SkyViewMode.CAMERA) onRequestCameraPermission()
                     },
                     onSelectPlane = viewModel::selectPlane,
                     miniMap = {
                         MiniMap(
                             location = state.location,
-                            azimuthDeg = state.orientation.azimuthDeg,
+                            azimuthDeg = state.orientation.compassBearingDeg,
                             prefs = state.prefs,
                             planes = state.planes,
                             onClick = {
@@ -145,7 +147,7 @@ fun AppNav(
                     location = state.location,
                     planes = state.planes,
                     prefs = state.prefs,
-                    azimuthDeg = state.orientation.azimuthDeg,
+                    azimuthDeg = state.orientation.compassBearingDeg,
                     onSelectPlane = viewModel::selectPlane,
                     onSetMapType = settingsViewModel::setMapType,
                     onToggleAircraft = settingsViewModel::setShowAircraft,

@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -29,6 +30,29 @@ import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
+
+// Plane silhouette centered at (0,0), scale 1.1f baked in — allocated once.
+private val PLANE_PATH: Path = Path().apply {
+    val s = 1.1f
+    moveTo(  0f * s, -16f * s)
+    lineTo(  2f * s,  -6f * s); lineTo(  2f * s,   0f * s)
+    lineTo( 15f * s,   8f * s); lineTo( 15f * s,  11f * s)
+    lineTo(  2f * s,   7f * s); lineTo(  2f * s,  12f * s)
+    lineTo(  7f * s,  16f * s); lineTo(  7f * s,  18f * s)
+    lineTo(  0f * s,  15f * s)
+    lineTo( -7f * s,  18f * s); lineTo( -7f * s,  16f * s)
+    lineTo( -2f * s,  12f * s); lineTo( -2f * s,   7f * s)
+    lineTo(-15f * s,  11f * s); lineTo(-15f * s,   8f * s)
+    lineTo( -2f * s,   0f * s); lineTo( -2f * s,  -6f * s)
+    close()
+}
+
+// Off-screen hint arrow: tip at (0,0) pointing up, base 26 px below — allocated once.
+private val HINT_ARROW_PATH: Path = Path().apply {
+    moveTo(0f, 0f); lineTo(-14f, 26f); lineTo(14f, 26f); close()
+}
+
+private val ICON_STROKE = Stroke(2f)
 
 private fun formatDistKm(meters: Double): String {
     val km = meters / 1_000.0
@@ -70,7 +94,7 @@ fun SkyOverlay(
     val hintColor = colorScheme.tertiary
     val selectionRing = colorScheme.primary
 
-    val hitTargets = remember { mutableListOf<PlaneHit>() }
+    val hitTargets = remember { ArrayList<PlaneHit>(64) }
     val titlePaint = remember(titleColor) {
         Paint().apply {
             isAntiAlias = true
@@ -185,23 +209,14 @@ private fun DrawScope.drawReticle(center: Offset) {
 }
 
 
-private fun DrawScope.drawPlaneIcon(pos: Offset, rotationDeg: Float, color: Color, scale: Float = 1.1f, stroke: Color) {
-    val pts = listOf(
-        0f to -16f, 2f to -6f, 2f to 0f, 15f to 8f, 15f to 11f, 2f to 7f, 2f to 12f,
-        7f to 16f, 7f to 18f, 0f to 15f, -7f to 18f, -7f to 16f, -2f to 12f, -2f to 7f,
-        -15f to 11f, -15f to 8f, -2f to 0f, -2f to -6f,
-    )
-    val path = Path().apply {
-        pts.forEachIndexed { i, (px, py) ->
-            val x = pos.x + px * scale
-            val y = pos.y + py * scale
-            if (i == 0) moveTo(x, y) else lineTo(x, y)
+// ponytail: PLANE_PATH is a module-level val; translate+rotate avoids per-frame Path allocs.
+// pivot = Offset.Zero rotates around the translated origin (= pos on screen).
+private fun DrawScope.drawPlaneIcon(pos: Offset, rotationDeg: Float, color: Color, stroke: Color) {
+    translate(left = pos.x, top = pos.y) {
+        rotate(degrees = rotationDeg, pivot = Offset.Zero) {
+            drawPath(PLANE_PATH, color)
+            drawPath(PLANE_PATH, stroke, style = ICON_STROKE)
         }
-        close()
-    }
-    rotate(degrees = rotationDeg, pivot = pos) {
-        drawPath(path, color)
-        drawPath(path, stroke, style = Stroke(2f))
     }
 }
 
@@ -253,18 +268,12 @@ private fun DrawScope.drawTag(
     return TagRect(left, top, left + boxW, top + boxH)
 }
 
+// ponytail: HINT_ARROW_PATH is a module-level val; translate avoids per-frame Path+Offset allocs.
 private fun DrawScope.drawOffScreenHint(center: Offset, bearingDeg: Float, span: Float, color: Color) {
     val radius = span * 0.42f
     rotate(degrees = bearingDeg, pivot = center) {
-        val tip = Offset(center.x, center.y - radius)
-        val lp = Offset(center.x - 14f, center.y - radius + 26f)
-        val rp = Offset(center.x + 14f, center.y - radius + 26f)
-        val path = Path().apply {
-            moveTo(tip.x, tip.y)
-            lineTo(lp.x, lp.y)
-            lineTo(rp.x, rp.y)
-            close()
+        translate(left = center.x, top = center.y - radius) {
+            drawPath(HINT_ARROW_PATH, color.copy(alpha = 0.9f))
         }
-        drawPath(path, color.copy(alpha = 0.9f))
     }
 }

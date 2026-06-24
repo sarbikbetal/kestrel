@@ -14,7 +14,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.sarbikbetal.kestrel.settings.SkyViewMode
 import com.sarbikbetal.kestrel.ui.AppNav
 import com.sarbikbetal.kestrel.ui.SkyViewModel
 import com.sarbikbetal.kestrel.ui.settings.SettingsViewModel
@@ -54,21 +53,11 @@ private fun PlaneSpotterApp() {
     val viewModel: SkyViewModel = viewModel()
     val settingsViewModel: SettingsViewModel = viewModel()
 
-    val prefs by settingsViewModel.prefs.collectAsStateWithLifecycle()
-    val wantCamera = prefs.skyViewMode == SkyViewMode.CAMERA
-
     val locationPerm = rememberPermissionState(Manifest.permission.ACCESS_FINE_LOCATION)
     val cameraPerm = rememberPermissionState(Manifest.permission.CAMERA)
 
     LaunchedEffect(Unit) {
         locationPerm.launchPermissionRequest()
-    }
-
-    // Only request camera if the user has chosen camera view.
-    LaunchedEffect(wantCamera) {
-        if (wantCamera && !cameraPerm.status.isGranted) {
-            cameraPerm.launchPermissionRequest()
-        }
     }
 
     LaunchedEffect(locationPerm.status.isGranted) {
@@ -79,5 +68,9 @@ private fun PlaneSpotterApp() {
         viewModel = viewModel,
         settingsViewModel = settingsViewModel,
         hasCameraPermission = cameraPerm.status.isGranted,
+        // Called only when the user explicitly switches to camera view — not on startup.
+        onRequestCameraPermission = {
+            if (!cameraPerm.status.isGranted) cameraPerm.launchPermissionRequest()
+        },
     )
 }

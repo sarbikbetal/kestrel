@@ -48,7 +48,7 @@ fun MiniMap(
         MapView(context).apply {
             setTileSource(TileSourceFactory.MAPNIK)
             setMultiTouchControls(false)
-            controller.setZoom(11.0)
+            controller.setZoom(8.0)
             isHorizontalMapRepetitionEnabled = false
             isVerticalMapRepetitionEnabled = false
         }

@@ -1,6 +1,8 @@
 package com.sarbikbetal.kestrel.ui.sky
 
 import android.content.Intent
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.os.SystemClock
 import android.provider.Settings
 import androidx.compose.animation.core.Animatable
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -24,14 +27,12 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.GpsOff
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
@@ -52,8 +53,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sarbikbetal.kestrel.sensors.DeviceOrientation
 import com.sarbikbetal.kestrel.settings.Formatters
@@ -115,14 +117,12 @@ fun ArSkyScreen(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
-            StatusCard(state = state)
+            HudCompass(state = state)
 
             if (state.locationIsStale) {
-                StaleLocationChip()
+                StaleLocationChip(modifier = Modifier.padding(start = 16.dp, top = 8.dp))
             }
         }
 
@@ -221,75 +221,131 @@ internal fun UpdateTimerDonut(poll: PollStatus, modifier: Modifier = Modifier) {
     }
 }
 
+private fun cardinalLabel(deg: Int): String = when (deg) {
+    0 -> "N"; 45 -> "NE"; 90 -> "E"; 135 -> "SE"
+    180 -> "S"; 225 -> "SW"; 270 -> "W"; 315 -> "NW"
+    else -> ""
+}
+
 @Composable
-private fun StatusCard(state: SkyUiState, modifier: Modifier = Modifier) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            val heading = compass(state.orientation.compassBearingDeg)
-            val clock = Formatters.clock(Date(), state.prefs.timeFormat)
+private fun HudCompass(state: SkyUiState, modifier: Modifier = Modifier) {
+    val cs = MaterialTheme.colorScheme
+    val bearing   = state.orientation.compassBearingDeg
+    val timeStr   = Formatters.clock(Date(), state.prefs.timeFormat)
+    val countStr  = "${state.planes.size} ✈"
+
+    // All Paint objects remembered — zero per-frame allocation in the draw block.
+    val primaryArgb   = cs.primary.toArgb()
+    val errorArgb     = cs.error.toArgb()
+    val dimArgb       = cs.onSurface.copy(alpha = 0.45f).toArgb()
+    val onSurfArgb    = cs.onSurface.toArgb()
+
+    val cardinalPaint = remember(primaryArgb) { Paint().apply {
+        isAntiAlias = true; color = primaryArgb
+        textSize = 38f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD
+    }}
+    val northPaint = remember(errorArgb) { Paint().apply {
+        isAntiAlias = true; color = errorArgb
+        textSize = 38f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD
+    }}
+    val degPaint = remember(dimArgb) { Paint().apply {
+        isAntiAlias = true; color = dimArgb
+        textSize = 26f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT
+    }}
+    val majorPaint = remember(primaryArgb) { Paint().apply {
+        isAntiAlias = true; color = primaryArgb; strokeWidth = 2.5f; style = Paint.Style.STROKE
+    }}
+    val minorPaint = remember(dimArgb) { Paint().apply {
+        isAntiAlias = true; color = dimArgb; strokeWidth = 1.5f; style = Paint.Style.STROKE
+    }}
+    val infoLPaint = remember(onSurfArgb) { Paint().apply {
+        isAntiAlias = true; color = onSurfArgb
+        textSize = 30f; textAlign = Paint.Align.LEFT; typeface = Typeface.DEFAULT_BOLD
+    }}
+    val infoRPaint = remember(onSurfArgb) { Paint().apply {
+        isAntiAlias = true; color = onSurfArgb
+        textSize = 30f; textAlign = Paint.Align.RIGHT; typeface = Typeface.DEFAULT_BOLD
+    }}
+
+    Column(modifier = modifier) {
+        // Single canvas: background shape + compass tape + info text.
+        Canvas(modifier = Modifier.fillMaxWidth().height(92.dp)) {
+            val w     = size.width
+            val h     = size.height
+            val cx    = w / 2f
+            val tapeH = 58.dp.toPx()
+            val infoH = h - tapeH
+            val nc    = drawContext.canvas.nativeCanvas
+
+            // ── Scooped background ────────────────────────────────────────
+            // Centre is cut away below the tape; left/right wings hold the info text.
+            // The cutout widens slightly toward the bottom (trapezoidal notch).
+            val scoopTopHW = w * 0.20f   // half-width at the tape/info boundary
+            val scoopBotHW = w * 0.32f   // half-width at the bottom edge
+            val bgPath = Path().apply {
+                moveTo(0f, 0f);               lineTo(w, 0f)
+                lineTo(w, h);                 lineTo(cx + scoopBotHW, h)
+                lineTo(cx + scoopTopHW, tapeH)
+                lineTo(cx - scoopTopHW, tapeH)
+                lineTo(cx - scoopBotHW, h);   lineTo(0f, h)
+                close()
+            }
+            drawPath(bgPath, Color.Black.copy(alpha = 0.62f))
+
+            // ── Compass tape ──────────────────────────────────────────────
+            val pxPerDeg = w / 80f
+            val shortH   = 8.dp.toPx()
+            val majorH   = 14.dp.toPx()
+            val cardH    = 20.dp.toPx()
+            val textY    = tapeH - 6.dp.toPx()
+
+            val start = (bearing - 42f).toInt() - 1
+            val end   = (bearing + 42f).toInt() + 1
+            for (raw in start..end) {
+                val norm = ((raw % 360) + 360) % 360
+                val x = cx + (raw.toFloat() - bearing) * pxPerDeg
+                if (x < -32f || x > w + 32f) continue
+                when {
+                    norm % 45 == 0 -> {
+                        nc.drawLine(x, 0f, x, cardH, majorPaint)
+                        val lbl = cardinalLabel(norm)
+                        nc.drawText(lbl, x, textY, if (norm == 0) northPaint else cardinalPaint)
+                    }
+                    norm % 15 == 0 -> {
+                        nc.drawLine(x, 0f, x, majorH, majorPaint)
+                        nc.drawText("$norm", x, textY - 2.dp.toPx(), degPaint)
+                    }
+                    norm % 5 == 0 -> nc.drawLine(x, 0f, x, shortH, minorPaint)
+                }
+            }
+
+            // Centre pointer — taller than cardinal ticks, marks current heading
+            drawLine(cs.primary, Offset(cx, 0f), Offset(cx, cardH + 6.dp.toPx()), 3f)
+
+            // ── Info text in wings ────────────────────────────────────────
+            val infoBaseline = tapeH + infoH * 0.68f
+            val padX = 14.dp.toPx()
+            nc.drawText(timeStr,  padX,     infoBaseline, infoLPaint)
+            nc.drawText(countStr, w - padX, infoBaseline, infoRPaint)
+        }
+
+        // Error banner — only rendered when needed, outside the canvas.
+        if (!state.sensorAvailable || state.error != null) {
             Text(
-                text = "$clock · $heading · ${state.planes.size} planes",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary,
+                if (!state.sensorAvailable) "No rotation sensor" else state.error ?: "",
+                modifier = Modifier.padding(start = 14.dp, bottom = 4.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = cs.error,
             )
-
-            val loc = state.location
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val (locText, locColor) = when {
-                    loc == null -> "Acquiring GPS…" to MaterialTheme.colorScheme.onSurfaceVariant
-                    state.locationIsStale -> "Last known %.4f, %.4f".format(loc.lat, loc.lon) to
-                        MaterialTheme.colorScheme.tertiary
-                    else -> "%.4f, %.4f".format(loc.lat, loc.lon) to MaterialTheme.colorScheme.onSurfaceVariant
-                }
-                if (loc != null && !state.locationIsStale) {
-                    Icon(
-                        imageVector = Icons.Filled.GpsFixed,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(14.dp),
-                    )
-                    Spacer(Modifier.width(6.dp))
-                }
-                Text(
-                    text = locText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = locColor,
-                )
-            }
-
-            if (!state.sensorAvailable) {
-                Text(
-                    "No rotation sensor",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            state.error?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
         }
     }
 }
 
 @Composable
-private fun StaleLocationChip() {
+private fun StaleLocationChip(modifier: Modifier = Modifier) {
     val ctx = LocalContext.current
     AssistChip(
+        modifier = modifier,
         onClick = {
             ctx.startActivity(
                 Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
@@ -316,12 +372,6 @@ private fun StaleLocationChip() {
         ),
         border = null,
     )
-}
-
-private fun compass(az: Float): String {
-    val dirs = listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
-    val idx = (((az + 22.5f) % 360f) / 45f).toInt().coerceIn(0, 7)
-    return "${az.roundToInt()}° ${dirs[idx]}"
 }
 
 @Composable
@@ -407,8 +457,9 @@ private fun SyntheticSky(
             val rollSin = sin(rollRad).toFloat()
 
             stars.forEach { s ->
-                // Azimuth delta: positive → star is to the right of phone heading
-                val dAz = ((s[0] - orientation.azimuthDeg + 540f) % 360f) - 180f
+                // Azimuth delta uses compassBearingDeg so stars and planes share the same
+                // true-north reference frame and don't drift relative to each other.
+                val dAz = ((s[0] - orientation.compassBearingDeg + 540f) % 360f) - 180f
                 // Raw offset from screen centre (no roll)
                 val rawDx = dAz * pixPerDeg
                 val rawDy = (orientation.elevationDeg - s[1]) * pixPerDeg
