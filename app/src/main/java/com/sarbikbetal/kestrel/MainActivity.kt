@@ -10,15 +10,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sarbikbetal.kestrel.settings.SkyViewMode
 import com.sarbikbetal.kestrel.ui.AppNav
 import com.sarbikbetal.kestrel.ui.SkyViewModel
 import com.sarbikbetal.kestrel.ui.settings.SettingsViewModel
 import com.sarbikbetal.kestrel.ui.theme.KestrelTheme
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
-import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import com.google.accompanist.permissions.rememberPermissionState
 import org.osmdroid.config.Configuration
 
 class MainActivity : ComponentActivity() {
@@ -51,28 +54,30 @@ private fun PlaneSpotterApp() {
     val viewModel: SkyViewModel = viewModel()
     val settingsViewModel: SettingsViewModel = viewModel()
 
-    val permissions = rememberMultiplePermissionsState(
-        listOf(Manifest.permission.CAMERA, Manifest.permission.ACCESS_FINE_LOCATION)
-    )
+    val prefs by settingsViewModel.prefs.collectAsStateWithLifecycle()
+    val wantCamera = prefs.skyViewMode == SkyViewMode.CAMERA
+
+    val locationPerm = rememberPermissionState(Manifest.permission.ACCESS_FINE_LOCATION)
+    val cameraPerm = rememberPermissionState(Manifest.permission.CAMERA)
 
     LaunchedEffect(Unit) {
-        permissions.launchMultiplePermissionRequest()
+        locationPerm.launchPermissionRequest()
     }
 
-    val cameraGranted = permissions.permissions
-        .firstOrNull { it.permission == Manifest.permission.CAMERA }
-        ?.status?.isGranted == true
-    val locationGranted = permissions.permissions
-        .firstOrNull { it.permission == Manifest.permission.ACCESS_FINE_LOCATION }
-        ?.status?.isGranted == true
+    // Only request camera if the user has chosen camera view.
+    LaunchedEffect(wantCamera) {
+        if (wantCamera && !cameraPerm.status.isGranted) {
+            cameraPerm.launchPermissionRequest()
+        }
+    }
 
-    LaunchedEffect(locationGranted) {
-        if (locationGranted) viewModel.startLocationUpdates()
+    LaunchedEffect(locationPerm.status.isGranted) {
+        if (locationPerm.status.isGranted) viewModel.startLocationUpdates()
     }
 
     AppNav(
         viewModel = viewModel,
         settingsViewModel = settingsViewModel,
-        hasCameraPermission = cameraGranted,
+        hasCameraPermission = cameraPerm.status.isGranted,
     )
 }

@@ -35,8 +35,6 @@ private fun formatDistKm(meters: Double): String {
     return if (km < 100.0) "%.1f km".format(km) else "${km.toInt()} km"
 }
 
-private const val H_FOV = 60.0
-private const val V_FOV = 50.0
 
 
 /** Axis-aligned rect used for label tap tests. */
@@ -119,13 +117,11 @@ fun SkyOverlay(
             val proj = SkyMath.project(
                 planeAzimuthDeg = tracked.sky.azimuthDeg,
                 planeElevationDeg = tracked.sky.elevationDeg,
-                deviceAzimuthDeg = orientation.azimuthDeg.toDouble(),
+                deviceAzimuthDeg = orientation.compassBearingDeg.toDouble(),
                 deviceElevationDeg = orientation.elevationDeg.toDouble(),
                 deviceRollDeg = orientation.rollDeg.toDouble(),
                 widthPx = w,
                 heightPx = h,
-                hFovDeg = H_FOV,
-                vFovDeg = V_FOV,
             )
 
             if (proj.onScreen) {
@@ -141,13 +137,11 @@ fun SkyOverlay(
                     val pa = SkyMath.project(
                         planeAzimuthDeg = it.azimuthDeg,
                         planeElevationDeg = it.elevationDeg,
-                        deviceAzimuthDeg = orientation.azimuthDeg.toDouble(),
+                        deviceAzimuthDeg = orientation.compassBearingDeg.toDouble(),
                         deviceElevationDeg = orientation.elevationDeg.toDouble(),
                         deviceRollDeg = orientation.rollDeg.toDouble(),
                         widthPx = w,
                         heightPx = h,
-                        hFovDeg = H_FOV,
-                        vFovDeg = V_FOV,
                     )
                     val dx = pa.x - proj.x
                     val dy = pa.y - proj.y

@@ -22,18 +22,16 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearWavyProgressIndicator
-import androidx.compose.material3.Material3ExpressiveApi
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,7 +39,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -76,11 +73,8 @@ fun PlaneDetailBottomSheet(
     error: String?,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
         shape = MaterialTheme.shapes.extraLargeIncreased,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         dragHandle = { },
@@ -136,32 +130,27 @@ fun PlaneDetailContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            IconButton(onClick = onClose) {
-                Icon(
-                    Icons.Filled.Close,
-                    contentDescription = "Close",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            FilledTonalIconButton(onClick = onClose) {
+                Icon(Icons.Filled.Close, contentDescription = "Close")
             }
         }
 
-        val hasRoute = details != null &&
-            ((details.originIata ?: details.originIcao) != null ||
-                (details.destIata ?: details.destIcao) != null)
-        if (hasRoute && details != null) {
+        val routeDetails = details?.takeIf {
+            (it.originIata ?: it.originIcao) != null || (it.destIata ?: it.destIcao) != null
+        }
+        if (routeDetails != null) {
             Spacer(Modifier.height(20.dp))
-            RouteStrip(details)
+            RouteStrip(routeDetails)
             Spacer(Modifier.height(16.dp))
-            FlightProgress(details, selected, prefs)
+            FlightProgress(routeDetails, selected, prefs)
         } else if (detailsLoading) {
             Spacer(Modifier.height(16.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                CircularProgressIndicator(
+                CircularWavyProgressIndicator(
                     modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Text(
@@ -275,7 +264,6 @@ private fun AirportColumn(
     }
 }
 
-@OptIn(Material3ExpressiveApi::class)
 @Composable
 private fun FlightProgress(details: FlightDetails, selected: TrackedPlane?, prefs: UserPrefs) {
     val oLat = details.originLat
@@ -426,9 +414,8 @@ private fun LoadingRow() {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        CircularProgressIndicator(
+        CircularWavyProgressIndicator(
             modifier = Modifier.size(20.dp),
-            strokeWidth = 2.dp,
             color = MaterialTheme.colorScheme.primary,
         )
         Text(

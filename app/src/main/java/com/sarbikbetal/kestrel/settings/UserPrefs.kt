@@ -41,6 +41,8 @@ enum class RouteSource(val label: String) {
     fun secondary() = if (this == HEXDB) ADSBDB else HEXDB
 }
 
+enum class SkyViewMode { CAMERA, SYNTHETIC }
+
 data class UserPrefs(
     val speedUnit: SpeedUnit = SpeedUnit.KNOTS,
     val altitudeUnit: AltitudeUnit = AltitudeUnit.FEET,
@@ -50,4 +52,5 @@ data class UserPrefs(
     val showHeadingCone: Boolean = true,
     val positionSource: PositionSource = PositionSource.ADSB_LOL,
     val routeSource: RouteSource = RouteSource.HEXDB,
+    val skyViewMode: SkyViewMode = SkyViewMode.SYNTHETIC,
 )

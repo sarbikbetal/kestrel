@@ -23,6 +23,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.sarbikbetal.kestrel.settings.SkyViewMode
 import com.sarbikbetal.kestrel.ui.map.MapScreen
 import com.sarbikbetal.kestrel.ui.map.MiniMap
 import com.sarbikbetal.kestrel.ui.settings.SettingsScreen
@@ -110,9 +111,15 @@ fun AppNav(
             modifier = Modifier.padding(innerPadding),
         ) {
             composable(Routes.SKY) {
+                val skyPrefs by settingsViewModel.prefs.collectAsStateWithLifecycle()
                 ArSkyScreen(
                     state = state,
                     hasCameraPermission = hasCameraPermission,
+                    skyViewMode = skyPrefs.skyViewMode,
+                    onToggleSkyView = {
+                        val next = if (skyPrefs.skyViewMode == SkyViewMode.CAMERA) SkyViewMode.SYNTHETIC else SkyViewMode.CAMERA
+                        settingsViewModel.setSkyViewMode(next)
+                    },
                     onSelectPlane = viewModel::selectPlane,
                     miniMap = {
                         MiniMap(

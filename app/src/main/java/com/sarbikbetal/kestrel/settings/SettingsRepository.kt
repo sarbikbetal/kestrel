@@ -34,6 +34,8 @@ class SettingsRepository(context: Context) {
                 ?: PositionSource.ADSB_LOL,
             routeSource = p[KEY_ROUTE_SOURCE]?.let { runCatching { RouteSource.valueOf(it) }.getOrNull() }
                 ?: RouteSource.HEXDB,
+            skyViewMode = p[KEY_SKY_VIEW]?.let { runCatching { SkyViewMode.valueOf(it) }.getOrNull() }
+                ?: SkyViewMode.CAMERA,
         )
     }
 
@@ -69,6 +71,10 @@ class SettingsRepository(context: Context) {
         ds.edit { it[KEY_ROUTE_SOURCE] = source.name }
     }
 
+    suspend fun setSkyViewMode(mode: SkyViewMode) {
+        ds.edit { it[KEY_SKY_VIEW] = mode.name }
+    }
+
     /** Persists the most recent GPS fix so it survives process restarts. */
     suspend fun saveLastLocation(loc: UserLocation) {
         ds.edit { p ->
@@ -101,6 +107,7 @@ class SettingsRepository(context: Context) {
         val KEY_SHOW_CONE = booleanPreferencesKey("show_heading_cone")
         val KEY_POSITION_SOURCE = stringPreferencesKey("position_source")
         val KEY_ROUTE_SOURCE = stringPreferencesKey("route_source")
+        val KEY_SKY_VIEW = stringPreferencesKey("sky_view_mode")
         // Last known GPS fix
         val KEY_LOC_LAT = doublePreferencesKey("loc_lat")
         val KEY_LOC_LON = doublePreferencesKey("loc_lon")

@@ -23,8 +23,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.GpsOff
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
@@ -32,6 +34,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,34 +42,52 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sarbikbetal.kestrel.sensors.DeviceOrientation
 import com.sarbikbetal.kestrel.settings.Formatters
+import com.sarbikbetal.kestrel.settings.SkyViewMode
 import com.sarbikbetal.kestrel.ui.PollStatus
 import com.sarbikbetal.kestrel.ui.SkyUiState
 import java.util.Date
+import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
+import kotlin.math.tan
+import kotlin.random.Random
 
 @Composable
 fun ArSkyScreen(
     state: SkyUiState,
     hasCameraPermission: Boolean,
+    skyViewMode: SkyViewMode,
+    onToggleSkyView: () -> Unit,
     onSelectPlane: (String?) -> Unit,
     miniMap: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val showCamera = skyViewMode == SkyViewMode.CAMERA && hasCameraPermission
+
     Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        if (hasCameraPermission) {
+        if (showCamera) {
             CameraPreview(modifier = Modifier.fillMaxSize())
+            SyntheticSky(
+                orientation = state.orientation,
+                showStars = false,
+                modifier = Modifier.fillMaxSize().alpha(0.45f),
+            )
         } else {
             SyntheticSky(orientation = state.orientation, modifier = Modifier.fillMaxSize())
         }
@@ -116,14 +137,32 @@ fun ArSkyScreen(
             ) {
                 miniMap()
             }
+        }
 
-            UpdateTimerDonut(
-                poll = state.poll,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(16.dp),
-            )
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalAlignment = Alignment.End,
+        ) {
+            if (state.selectedHex == null) {
+                UpdateTimerDonut(poll = state.poll)
+            }
+            val (toggleIcon, toggleDesc) = if (skyViewMode == SkyViewMode.CAMERA) {
+                Icons.Filled.WbSunny to "Switch to synthetic sky"
+            } else {
+                Icons.Filled.CameraAlt to "Switch to camera view"
+            }
+            SmallFloatingActionButton(
+                onClick = onToggleSkyView,
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                shape = MaterialTheme.shapes.large,
+            ) {
+                Icon(toggleIcon, contentDescription = toggleDesc)
+            }
         }
     }
 }
@@ -196,7 +235,7 @@ private fun StatusCard(state: SkyUiState, modifier: Modifier = Modifier) {
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            val heading = compass(state.orientation.azimuthDeg)
+            val heading = compass(state.orientation.compassBearingDeg)
             val clock = Formatters.clock(Date(), state.prefs.timeFormat)
             Text(
                 text = "$clock · $heading · ${state.planes.size} planes",
@@ -286,26 +325,113 @@ private fun compass(az: Float): String {
 }
 
 @Composable
-private fun SyntheticSky(orientation: DeviceOrientation, modifier: Modifier = Modifier) {
+private fun SyntheticSky(
+    orientation: DeviceOrientation,
+    showStars: Boolean = true,
+    modifier: Modifier = Modifier,
+) {
     val primary = MaterialTheme.colorScheme.primary
+    // Stable star field: [azimuth 0..360°, elevation 0..80°, brightness 0..1].
+    // All three axes are locked to the sky — azimuth, elevation, and roll.
+    val stars = remember {
+        val rng = Random(42)
+        Array(150) { floatArrayOf(rng.nextFloat() * 360f, rng.nextFloat() * 80f, rng.nextFloat()) }
+    }
     Canvas(modifier = modifier) {
         val h = size.height
         val w = size.width
-        drawRect(
-            brush = Brush.verticalGradient(
-                0f to Color(0xFF06101A),
-                0.6f to Color(0xFF12283D),
-                1f to Color(0xFF1E3A52),
-            ),
-        )
-        val horizonY = (h / 2f) + (orientation.elevationDeg / 50f) * (h / 2f)
-        if (horizonY in 0f..h) {
-            drawLine(
-                color = primary.copy(alpha = 0.5f),
-                start = Offset(0f, horizonY),
-                end = Offset(w, horizonY),
-                strokeWidth = 2f,
+        val cx = w / 2f
+        val cy = h / 2f
+
+        // horizonY: screen-space Y of the horizon centre (elevation only, no roll yet).
+        val horizonY = cy + (orientation.elevationDeg / 50f) * cy
+
+        // Roll angle: tilts the horizon line and sky/ground boundary.
+        val rollRad = orientation.rollDeg * (PI / 180.0)
+        val tanR = tan(rollRad).toFloat()
+
+        // Where the tilted horizon intersects the left (x=0) and right (x=w) screen edges.
+        val leftHorizonY  = horizonY - cx * tanR
+        val rightHorizonY = horizonY + (w - cx) * tanR
+
+        // Sky polygon: above the tilted horizon line.
+        val skyPath = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(w, 0f)
+            lineTo(w, rightHorizonY)
+            lineTo(0f, leftHorizonY)
+            close()
+        }
+
+        // Ground polygon: below the tilted horizon line.
+        val groundPath = Path().apply {
+            moveTo(0f, leftHorizonY)
+            lineTo(w, rightHorizonY)
+            lineTo(w, h)
+            lineTo(0f, h)
+            close()
+        }
+
+        // Dark base (fills gaps when horizon is entirely off-screen)
+        drawRect(Color(0xFF020810))
+
+        // Sky: gradient from near-black zenith to blue, clipped to sky polygon
+        clipPath(skyPath) {
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(Color(0xFF020810), Color(0xFF081730), Color(0xFF183E7A)),
+                    startY = 0f,
+                    endY = horizonY.coerceAtLeast(1f),
+                ),
+                size = Size(w, h),
             )
         }
+
+        // Ground: dark earth, clipped to ground polygon
+        clipPath(groundPath) {
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(Color(0xFF0A1A08), Color(0xFF030803)),
+                    startY = horizonY,
+                    endY = h,
+                ),
+                size = Size(w, h),
+            )
+        }
+
+        // Full 3-axis gyro-locked stars.
+        // pixPerDeg matches the horizonY formula so all axes use the same angular scale.
+        if (showStars) {
+            val pixPerDeg = cy / 50f
+            val rollCos = cos(rollRad).toFloat()
+            val rollSin = sin(rollRad).toFloat()
+
+            stars.forEach { s ->
+                // Azimuth delta: positive → star is to the right of phone heading
+                val dAz = ((s[0] - orientation.azimuthDeg + 540f) % 360f) - 180f
+                // Raw offset from screen centre (no roll)
+                val rawDx = dAz * pixPerDeg
+                val rawDy = (orientation.elevationDeg - s[1]) * pixPerDeg
+                // Apply roll rotation around screen centre
+                val sx = cx + rawDx * rollCos - rawDy * rollSin
+                val sy = cy + rawDx * rollSin + rawDy * rollCos
+                // Star is visible if on-screen and above the tilted horizon at that x
+                if (sx in 0f..w && sy >= 0f && sy < leftHorizonY + sx * tanR) {
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.25f + s[2] * 0.75f),
+                        radius = 0.8f + s[2] * 2.2f,
+                        center = Offset(sx, sy),
+                    )
+                }
+            }
+        }
+
+        // Tilted horizon line
+        drawLine(
+            color = primary.copy(alpha = 0.6f),
+            start = Offset(0f, leftHorizonY),
+            end = Offset(w, rightHorizonY),
+            strokeWidth = 2f,
+        )
     }
 }

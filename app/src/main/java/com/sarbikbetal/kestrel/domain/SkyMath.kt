@@ -101,8 +101,12 @@ object SkyMath {
 
     /**
      * Project a sky position onto the screen given where the device points.
-     * Uses a simple rectilinear (gnomonic-ish) approximation scaled by FOV,
-     * then rotates by device roll so markers track the horizon.
+     *
+     * Uses the same angular scale as SyntheticSky: (heightPx/2) / 50 px per degree.
+     * This guarantees that a plane at elevation 0 always lands exactly on the
+     * drawn horizon line regardless of device tilt, matching the visual sky perfectly.
+     * Roll is applied identically to how the star field rotates, keeping plane icons
+     * locked to the sky on all three axes.
      */
     fun project(
         planeAzimuthDeg: Double,
@@ -112,28 +116,32 @@ object SkyMath {
         deviceRollDeg: Double,
         widthPx: Float,
         heightPx: Float,
-        hFovDeg: Double = 60.0,
-        vFovDeg: Double = 50.0,
     ): Projection {
         val dAz = deltaAngle(planeAzimuthDeg, deviceAzimuthDeg)
         val dEl = planeElevationDeg - deviceElevationDeg
 
-        // Normalized offsets: +-1 at the edges of the field of view.
-        val nx = dAz / (hFovDeg / 2.0)
-        val ny = dEl / (vFovDeg / 2.0)
+        // Matches SyntheticSky: (h/2) / 50 px per degree.
+        val pxPerDeg = heightPx / 2.0 / 50.0
 
+        // Raw pixel offsets from screen centre.
+        // Positive dEl → plane is above device pointing direction → negative screen-y (up).
+        val rawDx = dAz * pxPerDeg
+        val rawDy = -dEl * pxPerDeg
+
+        // Apply roll rotation around screen centre — identical to star-field rotation.
         val r = Math.toRadians(deviceRollDeg)
-        val rx = nx * cos(r) + ny * sin(r)
-        val ry = -nx * sin(r) + ny * cos(r)
+        val cosR = cos(r); val sinR = sin(r)
+        val rotDx = rawDx * cosR - rawDy * sinR
+        val rotDy = rawDx * sinR + rawDy * cosR
 
-        val x = widthPx / 2f + (rx * (widthPx / 2f)).toFloat()
-        val y = heightPx / 2f - (ry * (heightPx / 2f)).toFloat()
+        val x = (widthPx  / 2f + rotDx).toFloat()
+        val y = (heightPx / 2f + rotDy).toFloat()
 
-        val margin = 1.05
-        val onScreen = abs(rx) <= margin && abs(ry) <= margin &&
-            abs(dAz) < 100.0 // behind-the-observer guard
+        val onScreen = abs(rotDx) <= widthPx  / 2f * 1.05 &&
+                       abs(rotDy) <= heightPx / 2f * 1.05 &&
+                       abs(dAz) < 100.0   // behind-the-observer guard
 
-        val bearing = (Math.toDegrees(atan2(rx, ry)) + 360.0) % 360.0
+        val bearing = (Math.toDegrees(atan2(rotDx, -rotDy)) + 360.0) % 360.0
         return Projection(onScreen, x, y, bearing.toFloat())
     }
 }
