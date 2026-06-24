@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -23,7 +24,6 @@ import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sarbikbetal.kestrel.data.FlightDetails
 import com.sarbikbetal.kestrel.data.TrackSample
@@ -111,13 +112,13 @@ fun PlaneDetailContent(
     val callsign = selected?.aircraft?.callsign ?: fallbackTitle
     val airline = details?.airlineName
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    // Header is outside the scroll area so the close button is always hittable,
+    // even during loading-induced recompositions.
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = callsign,
@@ -135,6 +136,13 @@ fun PlaneDetailContent(
                 Icon(Icons.Filled.Close, contentDescription = "Close")
             }
         }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp),
+        ) {
 
         val routeDetails = details?.takeIf {
             (it.originIata ?: it.originIcao) != null || (it.destIata ?: it.destIcao) != null
@@ -170,8 +178,12 @@ fun PlaneDetailContent(
         Spacer(Modifier.height(24.dp))
         SectionTitle("Speed & altitude")
         Spacer(Modifier.height(12.dp))
+        // Clip to the current trip: drop everything up to and including the last
+        // on-ground sample. altitudeMeters == 0.0 comes exclusively from the
+        // "ground" string in the adsb.lol trace_full JSON, so it's a clean signal.
+        val tripSamples = remember(samples) { currentTripSamples(samples) }
         when {
-            samples.size >= 2 -> Charts(samples, prefs)
+            tripSamples.size >= 2 -> Charts(tripSamples, prefs)
             loading -> CenterBox { LoadingRow() }
             error != null -> CenterBox {
                 Text(
@@ -188,7 +200,8 @@ fun PlaneDetailContent(
                 )
             }
         }
-    }
+        } // end scrollable column
+    } // end outer column
 }
 
 @Composable
@@ -267,123 +280,114 @@ private fun AirportColumn(
 
 @Composable
 private fun FlightProgress(details: FlightDetails, selected: TrackedPlane?, prefs: UserPrefs) {
-    val oLat = details.originLat
-    val oLon = details.originLon
-    val dLat = details.destLat
-    val dLon = details.destLon
-    val pLat = selected?.lat
-    val pLon = selected?.lon
+    val oLat = details.originLat; val oLon = details.originLon
+    val dLat = details.destLat;   val dLon = details.destLon
+    val pLat = selected?.lat;     val pLon = selected?.lon
 
     if (oLat == null || oLon == null || dLat == null || dLon == null) {
         LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
         return
     }
 
-    val flownM = if (pLat != null && pLon != null) SkyMath.haversineMeters(oLat, oLon, pLat, pLon) else 0.0
-    val remainingM = if (pLat != null && pLon != null) SkyMath.haversineMeters(pLat, pLon, dLat, dLon)
-        else SkyMath.haversineMeters(oLat, oLon, dLat, dLon)
-    val total = (flownM + remainingM).coerceAtLeast(1.0)
-    val fraction = (flownM / total).toFloat().coerceIn(0f, 1f)
+    val flownM   = if (pLat != null && pLon != null) SkyMath.haversineMeters(oLat, oLon, pLat, pLon) else 0.0
+    val remainM  = if (pLat != null && pLon != null) SkyMath.haversineMeters(pLat, pLon, dLat, dLon)
+                   else SkyMath.haversineMeters(oLat, oLon, dLat, dLon)
+    val totalM   = (flownM + remainM).coerceAtLeast(1.0)
+    val fraction = (flownM / totalM).toFloat().coerceIn(0f, 1f)
 
     LinearWavyProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
-
     Spacer(Modifier.height(8.dp))
 
     val speedKnots = selected?.aircraft?.groundSpeedKnots
-    val etaText = if (speedKnots != null && speedKnots > 20.0) {
-        val hours = (remainingM / 1000.0) / (speedKnots * 1.852)
-        val minutes = (hours * 60).roundToLong()
+    val etaStr: String?
+    val durStr: String?
+    if (speedKnots != null && speedKnots > 20.0) {
+        val minutes = ((remainM / 1000.0) / (speedKnots * 1.852) * 60).roundToLong()
         val arrival = Date(System.currentTimeMillis() + minutes * 60_000L)
-        "${formatDuration(minutes)} · ETA ${Formatters.clock(arrival, prefs.timeFormat)}"
-    } else null
+        etaStr = "ETA ${Formatters.clock(arrival, prefs.timeFormat)}"
+        durStr = "in ${formatDuration(minutes)}"
+    } else {
+        etaStr = null; durStr = null
+    }
 
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
-            "${formatKm(flownM)} flown",
+            "${formatKmNum(flownM)} / ${formatKmNum(totalM)} km",
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.weight(1f))
-        Text(
-            buildString {
-                append(formatKm(remainingM))
-                if (etaText != null) append(" · ").append(etaText)
-            },
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (etaStr != null) {
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    etaStr,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    durStr!!,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 
 
 @Composable
 private fun FlightInfoGrid(selected: TrackedPlane?, details: FlightDetails?, prefs: UserPrefs) {
-    val model = details?.aircraftType ?: selected?.aircraft?.type
-    val country = selected?.country
+    val model        = details?.aircraftType ?: selected?.aircraft?.type
+    val country      = selected?.country
     val registration = country?.let { "${it.flag} ${it.name}" } ?: selected?.aircraft?.registration
-    val speed = Formatters.speed(selected?.aircraft?.groundSpeedKnots, prefs.speedUnit)
-    val altitude = selected?.aircraft?.altitudeMeters?.let { Formatters.altitude(it, prefs.altitudeUnit) } ?: "—"
+    val speed        = Formatters.speed(selected?.aircraft?.groundSpeedKnots, prefs.speedUnit)
+    val altitude     = selected?.aircraft?.altitudeMeters
+        ?.let { Formatters.altitude(it, prefs.altitudeUnit) } ?: "—"
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCell("Aircraft", model ?: "—", Modifier.weight(1f))
-            StatCell("Registered", registration ?: "—", Modifier.weight(1f))
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatCell(
-                "Speed",
-                speed,
-                Modifier.weight(1f),
-                valueColor = MaterialTheme.colorScheme.tertiary,
-            )
-            StatCell(
-                "Altitude",
-                altitude,
-                Modifier.weight(1f),
-                valueColor = MaterialTheme.colorScheme.secondary,
-            )
-        }
+    Column {
+        InfoRow("Aircraft",     model ?: "—")
+        HorizontalDivider()
+        InfoRow("Registration", registration ?: "—")
+        HorizontalDivider()
+        InfoRow("Speed",        speed,    valueColor = MaterialTheme.colorScheme.tertiary)
+        HorizontalDivider()
+        InfoRow("Altitude",     altitude, valueColor = MaterialTheme.colorScheme.secondary)
     }
 }
 
 @Composable
-private fun StatCell(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier,
-    valueColor: Color = MaterialTheme.colorScheme.onSurface,
-) {
-    Card(
-        modifier = modifier,
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+private fun InfoRow(label: String, value: String, valueColor: Color = MaterialTheme.colorScheme.onSurface) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                value,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = valueColor,
-            )
-        }
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = valueColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = 200.dp),
+        )
     }
+}
+
+/** Drops all samples up to and including the last on-ground entry so the
+ *  chart only shows the current airborne leg of the trip. */
+private fun currentTripSamples(samples: List<TrackSample>): List<TrackSample> {
+    val lastGround = samples.indexOfLast { it.altitudeMeters == 0.0 }
+    return if (lastGround >= 0) samples.drop(lastGround + 1) else samples
 }
 
 private fun airportCode(iata: String?, icao: String?): String = iata ?: icao ?: "???"
 
-private fun formatKm(meters: Double): String {
-    val km = (meters / 1000.0).roundToInt()
-    val grouped = km.toString().reversed().chunked(3).joinToString(" ").reversed()
-    return "$grouped km"
-}
+private fun formatKmNum(meters: Double) = (meters / 1000.0).roundToInt().toString()
+
+private fun formatKm(meters: Double) = "${formatKmNum(meters)} km"
 
 private fun formatDuration(totalMinutes: Long): String {
     val h = totalMinutes / 60
@@ -415,9 +419,10 @@ private fun LoadingRow() {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        CircularWavyProgressIndicator(
+        CircularProgressIndicator(
             modifier = Modifier.size(20.dp),
             color = MaterialTheme.colorScheme.primary,
+            strokeWidth = 2.dp,
         )
         Text(
             "Loading flight history…",
