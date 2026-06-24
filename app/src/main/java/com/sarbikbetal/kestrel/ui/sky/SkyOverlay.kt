@@ -34,7 +34,7 @@ import kotlin.math.min
 
 // Plane silhouette centered at (0,0), scale 1.1f baked in — allocated once.
 private val PLANE_PATH: Path = Path().apply {
-    val s = 1.1f
+    val s = 2f
     moveTo(  0f * s, -16f * s)
     lineTo(  2f * s,  -6f * s); lineTo(  2f * s,   0f * s)
     lineTo( 15f * s,   8f * s); lineTo( 15f * s,  11f * s)
@@ -157,7 +157,7 @@ fun SkyOverlay(
                 val color = Color(PlaneSize.classify(tracked.aircraft.category).colorArgb)
 
                 if (tracked.aircraft.hex == selectedHex) {
-                    drawCircle(selectionRing, radius = 28f, center = pos, style = Stroke(3f))
+                    drawCircle(selectionRing, radius = 42f, center = pos, style = Stroke(3f))
                 }
 
                 val ahead = tracked.skyAhead
@@ -180,7 +180,7 @@ fun SkyOverlay(
                 if (screenRot != null) {
                     drawPlaneIcon(pos, screenRot, color, stroke = planeStroke)
                 } else {
-                    drawCircle(color, radius = 9f, center = pos)
+                    drawCircle(color, radius = 16f, center = pos)
                 }
 
                 val flag = tracked.country?.flag?.let { "$it " } ?: ""

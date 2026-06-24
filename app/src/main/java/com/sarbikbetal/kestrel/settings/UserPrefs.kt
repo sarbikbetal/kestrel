@@ -17,9 +17,9 @@ enum class TimeFormat(val label: String) {
 }
 
 enum class MapType(val label: String) {
+    HUMANITARIAN("Humanitarian"),
     STANDARD("Political"),
     TERRAIN("Terrain"),
-    HUMANITARIAN("Humanitarian"),
 }
 
 enum class PositionSource(val label: String) {
@@ -43,14 +43,21 @@ enum class RouteSource(val label: String) {
 
 enum class SkyViewMode { CAMERA, SYNTHETIC }
 
+enum class AppTheme(val label: String) {
+    MATERIAL_YOU("Material You"),
+    ASTRO_RED("Astro Red"),
+    AVIONICS_GREEN("Avionics Green"),
+}
+
 data class UserPrefs(
     val speedUnit: SpeedUnit = SpeedUnit.KNOTS,
     val altitudeUnit: AltitudeUnit = AltitudeUnit.FEET,
     val timeFormat: TimeFormat = TimeFormat.H24,
-    val mapType: MapType = MapType.STANDARD,
+    val mapType: MapType = MapType.HUMANITARIAN,
     val showAircraft: Boolean = true,
     val showHeadingCone: Boolean = true,
     val positionSource: PositionSource = PositionSource.ADSB_LOL,
     val routeSource: RouteSource = RouteSource.HEXDB,
     val skyViewMode: SkyViewMode = SkyViewMode.SYNTHETIC,
+    val appTheme: AppTheme = AppTheme.MATERIAL_YOU,
 )

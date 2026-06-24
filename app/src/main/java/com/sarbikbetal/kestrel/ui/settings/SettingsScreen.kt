@@ -1,24 +1,26 @@
 package com.sarbikbetal.kestrel.ui.settings
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -34,13 +36,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sarbikbetal.kestrel.settings.AltitudeUnit
+import com.sarbikbetal.kestrel.settings.AppTheme
 import com.sarbikbetal.kestrel.settings.PositionSource
 import com.sarbikbetal.kestrel.settings.RouteSource
 import com.sarbikbetal.kestrel.settings.SpeedUnit
 import com.sarbikbetal.kestrel.settings.TimeFormat
 import com.sarbikbetal.kestrel.settings.UserPrefs
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     prefs: UserPrefs,
@@ -50,6 +53,7 @@ fun SettingsScreen(
     onTimeFormat: (TimeFormat) -> Unit,
     onPositionSource: (PositionSource) -> Unit,
     onRouteSource: (RouteSource) -> Unit,
+    onAppTheme: (AppTheme) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -76,97 +80,197 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(inner)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            ChoiceCard(
-                title = "Speed",
-                options = SpeedUnit.entries,
-                selected = prefs.speedUnit,
-                labelOf = { it.label },
-                onSelect = onSpeedUnit,
-            )
-            ChoiceCard(
-                title = "Altitude",
-                options = AltitudeUnit.entries,
-                selected = prefs.altitudeUnit,
-                labelOf = { it.label },
-                onSelect = onAltitudeUnit,
-            )
-            ChoiceCard(
-                title = "Time format",
-                options = TimeFormat.entries,
-                selected = prefs.timeFormat,
-                labelOf = { it.label },
-                onSelect = onTimeFormat,
-            )
-            ChoiceCard(
-                title = "Position source",
-                options = PositionSource.entries,
-                selected = prefs.positionSource,
-                labelOf = { it.label },
-                onSelect = onPositionSource,
-            )
-            ChoiceCard(
-                title = "Route data",
-                options = RouteSource.entries,
-                selected = prefs.routeSource,
-                labelOf = { it.label },
-                onSelect = onRouteSource,
-            )
-            CompassCard(compassAccuracy = compassAccuracy)
+            // ── Appearance ────────────────────────────────────────────────
+            SectionHeader("Appearance")
+            SettingsGroup {
+                ListPreferenceItem(
+                    title = "Theme",
+                    selected = prefs.appTheme,
+                    options = AppTheme.entries,
+                    labelOf = { it.label },
+                    onSelect = onAppTheme,
+                )
+            }
+
+            // ── Units ─────────────────────────────────────────────────────
+            SectionHeader("Units")
+            SettingsGroup {
+                ListPreferenceItem(
+                    title = "Speed",
+                    selected = prefs.speedUnit,
+                    options = SpeedUnit.entries,
+                    labelOf = { it.label },
+                    onSelect = onSpeedUnit,
+                )
+                GroupDivider()
+                ListPreferenceItem(
+                    title = "Altitude",
+                    selected = prefs.altitudeUnit,
+                    options = AltitudeUnit.entries,
+                    labelOf = { it.label },
+                    onSelect = onAltitudeUnit,
+                )
+                GroupDivider()
+                ListPreferenceItem(
+                    title = "Time format",
+                    selected = prefs.timeFormat,
+                    options = TimeFormat.entries,
+                    labelOf = { it.label },
+                    onSelect = onTimeFormat,
+                )
+            }
+
+            // ── Data sources ──────────────────────────────────────────────
+            SectionHeader("Data sources")
+            SettingsGroup {
+                ListPreferenceItem(
+                    title = "Aircraft positions",
+                    selected = prefs.positionSource,
+                    options = PositionSource.entries,
+                    labelOf = { it.label },
+                    onSelect = onPositionSource,
+                )
+                GroupDivider()
+                ListPreferenceItem(
+                    title = "Route data",
+                    selected = prefs.routeSource,
+                    options = RouteSource.entries,
+                    labelOf = { it.label },
+                    onSelect = onRouteSource,
+                )
+            }
+
+            // ── Sensors ───────────────────────────────────────────────────
+            SectionHeader("Sensors")
+            CompassGroup(compassAccuracy = compassAccuracy)
+
+            Spacer(Modifier.padding(bottom = 16.dp))
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun CompassCard(compassAccuracy: Int, modifier: Modifier = Modifier) {
-    var showDialog by remember { mutableStateOf(false) }
-    val (label, color) = accuracyLabelAndColor(compassAccuracy)
+// ── Section label ─────────────────────────────────────────────────────────────
 
+@Composable
+private fun SectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 4.dp, top = 20.dp, bottom = 6.dp),
+    )
+}
+
+// ── Card group wrapper ────────────────────────────────────────────────────────
+
+@Composable
+private fun SettingsGroup(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.largeIncreased,
+        shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
+        Column(content = content)
+    }
+}
+
+@Composable
+private fun GroupDivider() =
+    HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
+
+// ── Generic list preference row ───────────────────────────────────────────────
+
+@Composable
+private fun <T> ListPreferenceItem(
+    title: String,
+    selected: T,
+    options: List<T>,
+    labelOf: (T) -> String,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var showDialog by remember { mutableStateOf(false) }
+
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = {
             Text(
-                "Compass & Gyro",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
+                labelOf(selected),
+                color = MaterialTheme.colorScheme.primary,
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "Sync accuracy",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    label,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = color,
-                )
-            }
-            FilledTonalButton(
-                onClick = { showDialog = true },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Calibrate compass")
-            }
-        }
+        },
+        modifier = modifier.clickable { showDialog = true },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+    )
+
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text(title) },
+            text = {
+                Column {
+                    options.forEach { option ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onSelect(option)
+                                    showDialog = false
+                                }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = option == selected,
+                                onClick = {
+                                    onSelect(option)
+                                    showDialog = false
+                                },
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(labelOf(option))
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+}
+
+// ── Compass & Gyro group ──────────────────────────────────────────────────────
+
+@Composable
+private fun CompassGroup(compassAccuracy: Int, modifier: Modifier = Modifier) {
+    var showDialog by remember { mutableStateOf(false) }
+    val (label, color) = accuracyLabelAndColor(compassAccuracy)
+
+    SettingsGroup(modifier = modifier) {
+        ListItem(
+            headlineContent = { Text("Sync accuracy") },
+            supportingContent = { Text(label, color = color) },
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        )
+        GroupDivider()
+        ListItem(
+            headlineContent = { Text("Calibrate compass") },
+            supportingContent = { Text("Trace a figure-8 to improve accuracy") },
+            modifier = Modifier.clickable { showDialog = true },
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        )
     }
 
     if (showDialog) {
@@ -189,54 +293,12 @@ private fun CompassCard(compassAccuracy: Int, modifier: Modifier = Modifier) {
     }
 }
 
-/** Returns a human-readable label and a theme color for the given accuracy level. */
+/** Human-readable label and a theme color for the given accuracy level. */
 @Composable
 private fun accuracyLabelAndColor(accuracy: Int): Pair<String, Color> = when (accuracy) {
-    3 -> "High" to MaterialTheme.colorScheme.primary
-    2 -> "Medium" to MaterialTheme.colorScheme.tertiary
-    1 -> "Low" to MaterialTheme.colorScheme.error
-    0 -> "Unreliable" to MaterialTheme.colorScheme.error
-    else -> "Waiting…" to MaterialTheme.colorScheme.onSurfaceVariant
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun <T> ChoiceCard(
-    title: String,
-    options: List<T>,
-    selected: T,
-    labelOf: (T) -> String,
-    onSelect: (T) -> Unit,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.largeIncreased,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                options.forEachIndexed { index, option ->
-                    SegmentedButton(
-                        selected = option == selected,
-                        onClick = { onSelect(option) },
-                        shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                    ) {
-                        Text(labelOf(option))
-                    }
-                }
-            }
-        }
-    }
+    3    -> "High"        to MaterialTheme.colorScheme.primary
+    2    -> "Medium"      to MaterialTheme.colorScheme.tertiary
+    1    -> "Low"         to MaterialTheme.colorScheme.error
+    0    -> "Unreliable"  to MaterialTheme.colorScheme.error
+    else -> "Waiting…"    to MaterialTheme.colorScheme.onSurfaceVariant
 }

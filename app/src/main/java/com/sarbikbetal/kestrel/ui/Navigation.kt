@@ -168,6 +168,7 @@ fun AppNav(
                     onTimeFormat = settingsViewModel::setTimeFormat,
                     onPositionSource = settingsViewModel::setPositionSource,
                     onRouteSource = settingsViewModel::setRouteSource,
+                    onAppTheme = settingsViewModel::setAppTheme,
                 )
             }
         }

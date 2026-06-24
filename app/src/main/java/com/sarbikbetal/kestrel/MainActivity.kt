@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -14,10 +15,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sarbikbetal.kestrel.settings.AppTheme
 import com.sarbikbetal.kestrel.ui.AppNav
 import com.sarbikbetal.kestrel.ui.SkyViewModel
 import com.sarbikbetal.kestrel.ui.settings.SettingsViewModel
 import com.sarbikbetal.kestrel.ui.theme.KestrelTheme
+import com.sarbikbetal.kestrel.ui.theme.avionicsScanlines
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
@@ -35,14 +38,7 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
-            KestrelTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.background,
-                ) {
-                    PlaneSpotterApp()
-                }
-            }
+            PlaneSpotterApp()
         }
     }
 }
@@ -52,6 +48,7 @@ class MainActivity : ComponentActivity() {
 private fun PlaneSpotterApp() {
     val viewModel: SkyViewModel = viewModel()
     val settingsViewModel: SettingsViewModel = viewModel()
+    val prefs by settingsViewModel.prefs.collectAsStateWithLifecycle()
 
     val locationPerm = rememberPermissionState(Manifest.permission.ACCESS_FINE_LOCATION)
     val cameraPerm = rememberPermissionState(Manifest.permission.CAMERA)
@@ -64,13 +61,25 @@ private fun PlaneSpotterApp() {
         if (locationPerm.status.isGranted) viewModel.startLocationUpdates()
     }
 
-    AppNav(
-        viewModel = viewModel,
-        settingsViewModel = settingsViewModel,
-        hasCameraPermission = cameraPerm.status.isGranted,
-        // Called only when the user explicitly switches to camera view — not on startup.
-        onRequestCameraPermission = {
-            if (!cameraPerm.status.isGranted) cameraPerm.launchPermissionRequest()
-        },
-    )
+    KestrelTheme(appTheme = prefs.appTheme) {
+        val scanlines = if (prefs.appTheme == AppTheme.AVIONICS_GREEN) {
+            Modifier.fillMaxSize().avionicsScanlines()
+        } else {
+            Modifier.fillMaxSize()
+        }
+        Surface(
+            modifier = scanlines,
+            color = MaterialTheme.colorScheme.background,
+        ) {
+            AppNav(
+                viewModel = viewModel,
+                settingsViewModel = settingsViewModel,
+                hasCameraPermission = cameraPerm.status.isGranted,
+                // Called only when the user explicitly switches to camera view — not on startup.
+                onRequestCameraPermission = {
+                    if (!cameraPerm.status.isGranted) cameraPerm.launchPermissionRequest()
+                },
+            )
+        }
+    }
 }

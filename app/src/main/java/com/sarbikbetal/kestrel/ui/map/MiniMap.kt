@@ -23,12 +23,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.sarbikbetal.kestrel.location.UserLocation
+import com.sarbikbetal.kestrel.settings.AppTheme
 import com.sarbikbetal.kestrel.settings.UserPrefs
 import com.sarbikbetal.kestrel.ui.TrackedPlane
+import com.sarbikbetal.kestrel.ui.theme.ASTRO_RED_MAP_FILTER
+import com.sarbikbetal.kestrel.ui.theme.LocalAppTheme
 import kotlinx.coroutines.delay
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.TilesOverlay
 
 private const val MINIMAP_PLANE_CAP = 40
 private const val MINIMAP_REFRESH_MS = 100L
@@ -44,6 +48,7 @@ fun MiniMap(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val appTheme = LocalAppTheme.current
     val mapView = remember {
         MapView(context).apply {
             setTileSource(TileSourceFactory.MAPNIK)
@@ -64,6 +69,12 @@ fun MiniMap(
 
     LaunchedEffect(prefs.mapType) {
         mapView.setTileSource(MapTiles.source(prefs.mapType))
+        mapView.invalidate()
+    }
+
+    LaunchedEffect(appTheme) {
+        val filter = if (appTheme == AppTheme.ASTRO_RED) ASTRO_RED_MAP_FILTER else null
+        mapView.overlayManager.tilesOverlay.setColorFilter(filter)
         mapView.invalidate()
     }
 

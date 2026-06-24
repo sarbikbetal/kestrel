@@ -2,6 +2,7 @@ package com.sarbikbetal.kestrel.ui.sky
 
 import android.content.Intent
 import android.graphics.Paint
+import android.widget.Toast
 import android.graphics.Typeface
 import android.os.SystemClock
 import android.provider.Settings
@@ -26,13 +27,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.GpsOff
-import androidx.compose.material.icons.filled.WbSunny
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
@@ -59,8 +60,10 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.sarbikbetal.kestrel.sensors.DeviceOrientation
+import com.sarbikbetal.kestrel.settings.AppTheme
 import com.sarbikbetal.kestrel.settings.Formatters
 import com.sarbikbetal.kestrel.settings.SkyViewMode
+import com.sarbikbetal.kestrel.ui.theme.LocalAppTheme
 import com.sarbikbetal.kestrel.ui.PollStatus
 import com.sarbikbetal.kestrel.ui.SkyUiState
 import java.util.Date
@@ -83,6 +86,24 @@ fun ArSkyScreen(
     modifier: Modifier = Modifier,
 ) {
     val showCamera = skyViewMode == SkyViewMode.CAMERA && hasCameraPermission
+
+    val ctx = LocalContext.current
+    val openLocationSettings = {
+        ctx.startActivity(
+            Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+    // One-off toast when we fall back to a cached fix; the persistent GPS FAB
+    // stays visible until a live fix arrives as the lasting affordance.
+    LaunchedEffect(state.locationIsStale) {
+        if (!state.locationIsStale) return@LaunchedEffect
+        Toast.makeText(
+            ctx,
+            "Using last known location — tap the GPS icon to enable location services",
+            Toast.LENGTH_LONG,
+        ).show()
+    }
 
     Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (showCamera) {
@@ -123,8 +144,13 @@ fun ArSkyScreen(
         ) {
             HudCompass(state = state, orientation = orientation)
 
-            if (state.locationIsStale) {
-                StaleLocationChip(modifier = Modifier.padding(start = 16.dp, top = 8.dp))
+            if (state.selectedHex == null) {
+                UpdateTimerDonut(
+                    poll = state.poll,
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .padding(top = 8.dp, end = 16.dp),
+                )
             }
         }
 
@@ -149,23 +175,31 @@ fun ArSkyScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.End,
         ) {
-            if (state.selectedHex == null) {
-                UpdateTimerDonut(poll = state.poll)
+            if (state.locationIsStale) {
+                SmallFloatingActionButton(
+                    onClick = openLocationSettings,
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    shape = FloatingActionButtonDefaults.smallShape,
+                ) {
+                    Icon(Icons.Filled.GpsOff, contentDescription = "Location not enabled — tap to turn on")
+                }
             }
             val (toggleIcon, toggleDesc) = if (skyViewMode == SkyViewMode.CAMERA) {
-                Icons.Filled.WbSunny to "Switch to synthetic sky"
+                Icons.Filled.AutoAwesome to "Switch to synthetic sky"
             } else {
-                Icons.Filled.CameraAlt to "Switch to camera view"
+                Icons.Filled.Videocam to "Switch to live camera view"
             }
-            SmallFloatingActionButton(
+            FloatingActionButton(
                 onClick = onToggleSkyView,
                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                shape = MaterialTheme.shapes.large,
+                shape = FloatingActionButtonDefaults.shape,
             ) {
                 Icon(toggleIcon, contentDescription = toggleDesc)
             }
         }
+
     }
 }
 
@@ -238,10 +272,11 @@ private fun HudCompass(
     val cs = MaterialTheme.colorScheme
     val timeStr   = Formatters.clock(Date(), state.prefs.timeFormat)
     val countStr  = "${state.planes.size} ✈"
+    // Theme-aware scrim: dark in dark mode, light in light mode (text uses onSurface).
+    val scoopColor = cs.surface.copy(alpha = 0.72f)
 
     // All Paint objects remembered — zero per-frame allocation in the draw block.
     val primaryArgb   = cs.primary.toArgb()
-    val errorArgb     = cs.error.toArgb()
     val dimArgb       = cs.onSurface.copy(alpha = 0.45f).toArgb()
     val onSurfArgb    = cs.onSurface.toArgb()
 
@@ -249,8 +284,8 @@ private fun HudCompass(
         isAntiAlias = true; color = primaryArgb
         textSize = 38f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD
     }}
-    val northPaint = remember(errorArgb) { Paint().apply {
-        isAntiAlias = true; color = errorArgb
+    val northPaint = remember { Paint().apply {
+        isAntiAlias = true; color = android.graphics.Color.RED
         textSize = 38f; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD
     }}
     val degPaint = remember(dimArgb) { Paint().apply {
@@ -298,7 +333,7 @@ private fun HudCompass(
                 lineTo(cx - scoopBotHW, h);   lineTo(0f, h)
                 close()
             }
-            drawPath(bgPath, Color.Black.copy(alpha = 0.62f))
+            drawPath(bgPath, scoopColor)
 
             // ── Compass tape ──────────────────────────────────────────────
             val pxPerDeg = w / 80f
@@ -350,57 +385,36 @@ private fun HudCompass(
 }
 
 @Composable
-private fun StaleLocationChip(modifier: Modifier = Modifier) {
-    val ctx = LocalContext.current
-    AssistChip(
-        modifier = modifier,
-        onClick = {
-            ctx.startActivity(
-                Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
-        },
-        label = {
-            Text(
-                "Last known location — tap to enable GPS",
-                style = MaterialTheme.typography.labelLarge,
-            )
-        },
-        leadingIcon = {
-            Icon(
-                Icons.Filled.GpsOff,
-                contentDescription = null,
-                modifier = Modifier.size(AssistChipDefaults.IconSize),
-            )
-        },
-        colors = AssistChipDefaults.assistChipColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-            labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
-            leadingIconContentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-        ),
-        border = null,
-    )
-}
-
-@Composable
 private fun SyntheticSky(
     orientation: State<DeviceOrientation>,
     showStars: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    val primary = MaterialTheme.colorScheme.primary
+    val primary   = MaterialTheme.colorScheme.primary
+    val astroRed  = LocalAppTheme.current == AppTheme.ASTRO_RED
+
     // Stable star field: [azimuth 0..360°, elevation 0..80°, brightness 0..1].
     // All three axes are locked to the sky — azimuth, elevation, and roll.
     val stars = remember {
         val rng = Random(42)
         Array(150) { floatArrayOf(rng.nextFloat() * 360f, rng.nextFloat() * 80f, rng.nextFloat()) }
     }
+
+    // Theme-keyed colours resolved once per composition, not per draw frame.
+    val baseColor    = if (astroRed) Color(0xFF000000) else Color(0xFF020810)
+    val skyColors    = if (astroRed) listOf(Color(0xFF000000), Color(0xFF0A0000), Color(0xFF180000))
+                       else          listOf(Color(0xFF020810), Color(0xFF081730), Color(0xFF183E7A))
+    val groundColors = if (astroRed) listOf(Color(0xFF050000), Color(0xFF000000))
+                       else          listOf(Color(0xFF0A1A08), Color(0xFF030803))
+    // Astro Red: dim deep-crimson pinpoints. Normal: white star points.
+    val starTint     = if (astroRed) Color(0xFFCC1100) else Color.White
+
     Canvas(modifier = modifier) {
         // Read orientation in the draw phase: phone motion repaints the sky without
         // recomposing this composable.
-        val o = orientation.value
-        val h = size.height
-        val w = size.width
+        val o  = orientation.value
+        val h  = size.height
+        val w  = size.width
         val cx = w / 2f
         val cy = h / 2f
 
@@ -409,7 +423,7 @@ private fun SyntheticSky(
 
         // Roll angle: tilts the horizon line and sky/ground boundary.
         val rollRad = o.rollDeg * (PI / 180.0)
-        val tanR = tan(rollRad).toFloat()
+        val tanR    = tan(rollRad).toFloat()
 
         // Where the tilted horizon intersects the left (x=0) and right (x=w) screen edges.
         val leftHorizonY  = horizonY - cx * tanR
@@ -417,32 +431,28 @@ private fun SyntheticSky(
 
         // Sky polygon: above the tilted horizon line.
         val skyPath = Path().apply {
-            moveTo(0f, 0f)
-            lineTo(w, 0f)
-            lineTo(w, rightHorizonY)
-            lineTo(0f, leftHorizonY)
+            moveTo(0f, 0f);         lineTo(w, 0f)
+            lineTo(w, rightHorizonY); lineTo(0f, leftHorizonY)
             close()
         }
 
         // Ground polygon: below the tilted horizon line.
         val groundPath = Path().apply {
-            moveTo(0f, leftHorizonY)
-            lineTo(w, rightHorizonY)
-            lineTo(w, h)
-            lineTo(0f, h)
+            moveTo(0f, leftHorizonY); lineTo(w, rightHorizonY)
+            lineTo(w, h);             lineTo(0f, h)
             close()
         }
 
         // Dark base (fills gaps when horizon is entirely off-screen)
-        drawRect(Color(0xFF020810))
+        drawRect(baseColor)
 
-        // Sky: gradient from near-black zenith to blue, clipped to sky polygon
+        // Sky: gradient from near-black zenith down to horizon colour
         clipPath(skyPath) {
             drawRect(
                 brush = Brush.verticalGradient(
-                    colors = listOf(Color(0xFF020810), Color(0xFF081730), Color(0xFF183E7A)),
+                    colors = skyColors,
                     startY = 0f,
-                    endY = horizonY.coerceAtLeast(1f),
+                    endY   = horizonY.coerceAtLeast(1f),
                 ),
                 size = Size(w, h),
             )
@@ -452,9 +462,9 @@ private fun SyntheticSky(
         clipPath(groundPath) {
             drawRect(
                 brush = Brush.verticalGradient(
-                    colors = listOf(Color(0xFF0A1A08), Color(0xFF030803)),
+                    colors = groundColors,
                     startY = horizonY,
-                    endY = h,
+                    endY   = h,
                 ),
                 size = Size(w, h),
             )
@@ -464,23 +474,20 @@ private fun SyntheticSky(
         // pixPerDeg matches the horizonY formula so all axes use the same angular scale.
         if (showStars) {
             val pixPerDeg = cy / 50f
-            val rollCos = cos(rollRad).toFloat()
-            val rollSin = sin(rollRad).toFloat()
+            val rollCos   = cos(rollRad).toFloat()
+            val rollSin   = sin(rollRad).toFloat()
 
             stars.forEach { s ->
                 // Azimuth delta uses compassBearingDeg so stars and planes share the same
                 // true-north reference frame and don't drift relative to each other.
-                val dAz = ((s[0] - o.compassBearingDeg + 540f) % 360f) - 180f
-                // Raw offset from screen centre (no roll)
+                val dAz   = ((s[0] - o.compassBearingDeg + 540f) % 360f) - 180f
                 val rawDx = dAz * pixPerDeg
                 val rawDy = (o.elevationDeg - s[1]) * pixPerDeg
-                // Apply roll rotation around screen centre
-                val sx = cx + rawDx * rollCos - rawDy * rollSin
-                val sy = cy + rawDx * rollSin + rawDy * rollCos
-                // Star is visible if on-screen and above the tilted horizon at that x
+                val sx    = cx + rawDx * rollCos - rawDy * rollSin
+                val sy    = cy + rawDx * rollSin + rawDy * rollCos
                 if (sx in 0f..w && sy >= 0f && sy < leftHorizonY + sx * tanR) {
                     drawCircle(
-                        color = Color.White.copy(alpha = 0.25f + s[2] * 0.75f),
+                        color  = starTint.copy(alpha = 0.25f + s[2] * 0.75f),
                         radius = 0.8f + s[2] * 2.2f,
                         center = Offset(sx, sy),
                     )
@@ -488,11 +495,11 @@ private fun SyntheticSky(
             }
         }
 
-        // Tilted horizon line
+        // Tilted horizon line — uses theme primary (already red in Astro Red)
         drawLine(
-            color = primary.copy(alpha = 0.6f),
-            start = Offset(0f, leftHorizonY),
-            end = Offset(w, rightHorizonY),
+            color       = primary.copy(alpha = 0.6f),
+            start       = Offset(0f, leftHorizonY),
+            end         = Offset(w, rightHorizonY),
             strokeWidth = 2f,
         )
     }

@@ -27,7 +27,7 @@ class SettingsRepository(context: Context) {
             timeFormat = p[KEY_TIME]?.let { runCatching { TimeFormat.valueOf(it) }.getOrNull() }
                 ?: TimeFormat.H24,
             mapType = p[KEY_MAP_TYPE]?.let { runCatching { MapType.valueOf(it) }.getOrNull() }
-                ?: MapType.STANDARD,
+                ?: MapType.HUMANITARIAN,
             showAircraft = p[KEY_SHOW_AIRCRAFT] ?: true,
             showHeadingCone = p[KEY_SHOW_CONE] ?: true,
             positionSource = p[KEY_POSITION_SOURCE]?.let { runCatching { PositionSource.valueOf(it) }.getOrNull() }
@@ -36,6 +36,8 @@ class SettingsRepository(context: Context) {
                 ?: RouteSource.HEXDB,
             skyViewMode = p[KEY_SKY_VIEW]?.let { runCatching { SkyViewMode.valueOf(it) }.getOrNull() }
                 ?: SkyViewMode.CAMERA,
+            appTheme = p[KEY_THEME]?.let { runCatching { AppTheme.valueOf(it) }.getOrNull() }
+                ?: AppTheme.MATERIAL_YOU,
         )
     }
 
@@ -75,6 +77,10 @@ class SettingsRepository(context: Context) {
         ds.edit { it[KEY_SKY_VIEW] = mode.name }
     }
 
+    suspend fun setAppTheme(theme: AppTheme) {
+        ds.edit { it[KEY_THEME] = theme.name }
+    }
+
     /** Persists the most recent GPS fix so it survives process restarts. */
     suspend fun saveLastLocation(loc: UserLocation) {
         ds.edit { p ->
@@ -108,6 +114,7 @@ class SettingsRepository(context: Context) {
         val KEY_POSITION_SOURCE = stringPreferencesKey("position_source")
         val KEY_ROUTE_SOURCE = stringPreferencesKey("route_source")
         val KEY_SKY_VIEW = stringPreferencesKey("sky_view_mode")
+        val KEY_THEME = stringPreferencesKey("app_theme")
         // Last known GPS fix
         val KEY_LOC_LAT = doublePreferencesKey("loc_lat")
         val KEY_LOC_LON = doublePreferencesKey("loc_lon")

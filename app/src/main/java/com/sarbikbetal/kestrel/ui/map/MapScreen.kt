@@ -18,6 +18,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
@@ -40,13 +41,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.sarbikbetal.kestrel.location.UserLocation
+import com.sarbikbetal.kestrel.settings.AppTheme
 import com.sarbikbetal.kestrel.settings.MapType
 import com.sarbikbetal.kestrel.settings.UserPrefs
 import com.sarbikbetal.kestrel.ui.TrackedPlane
+import com.sarbikbetal.kestrel.ui.theme.ASTRO_RED_MAP_FILTER
+import com.sarbikbetal.kestrel.ui.theme.LocalAppTheme
 import kotlinx.coroutines.delay
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.TilesOverlay
 
 private const val MAP_REFRESH_MS = 100L
 
@@ -63,6 +68,7 @@ fun MapScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val appTheme = LocalAppTheme.current
     val mapView = remember {
         MapView(context).apply {
             setTileSource(TileSourceFactory.MAPNIK)
@@ -82,6 +88,12 @@ fun MapScreen(
 
     LaunchedEffect(prefs.mapType) {
         mapView.setTileSource(MapTiles.source(prefs.mapType))
+        mapView.invalidate()
+    }
+
+    LaunchedEffect(appTheme) {
+        val filter = if (appTheme == AppTheme.ASTRO_RED) ASTRO_RED_MAP_FILTER else null
+        mapView.overlayManager.tilesOverlay.setColorFilter(filter)
         mapView.invalidate()
     }
 
@@ -132,7 +144,7 @@ fun MapScreen(
                 onClick = { showLayersSheet = true },
                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                shape = MaterialTheme.shapes.largeIncreased,
+                shape = FloatingActionButtonDefaults.shape,
             ) {
                 Icon(Icons.Filled.Layers, contentDescription = "Map layers")
             }
@@ -148,7 +160,7 @@ fun MapScreen(
                 .padding(16.dp),
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            shape = MaterialTheme.shapes.largeIncreased,
+            shape = FloatingActionButtonDefaults.shape,
         ) {
             Icon(Icons.Filled.MyLocation, contentDescription = "Recenter")
         }
