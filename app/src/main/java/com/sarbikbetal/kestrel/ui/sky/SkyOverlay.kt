@@ -38,10 +38,6 @@ private fun formatDistKm(meters: Double): String {
 private const val H_FOV = 60.0
 private const val V_FOV = 50.0
 
-private const val NEAR_M = 4_000.0
-private const val FAR_M = 70_000.0
-private const val MIN_SCALE = 1.1f
-private const val MAX_SCALE = 2.8f
 
 /** Axis-aligned rect used for label tap tests. */
 private data class TagRect(val l: Float, val t: Float, val r: Float, val b: Float) {
@@ -135,10 +131,9 @@ fun SkyOverlay(
             if (proj.onScreen) {
                 val pos = Offset(proj.x, proj.y)
                 val color = Color(PlaneSize.classify(tracked.aircraft.category).colorArgb)
-                val scale = distanceScale(tracked.sky.slantDistanceMeters)
 
                 if (tracked.aircraft.hex == selectedHex) {
-                    drawCircle(selectionRing, radius = 28f * scale, center = pos, style = Stroke(3f))
+                    drawCircle(selectionRing, radius = 28f, center = pos, style = Stroke(3f))
                 }
 
                 val ahead = tracked.skyAhead
@@ -161,9 +156,9 @@ fun SkyOverlay(
                     } else null
                 }
                 if (screenRot != null) {
-                    drawPlaneIcon(pos, screenRot, color, scale, planeStroke)
+                    drawPlaneIcon(pos, screenRot, color, stroke = planeStroke)
                 } else {
-                    drawCircle(color, radius = 9f * scale, center = pos)
+                    drawCircle(color, radius = 9f, center = pos)
                 }
 
                 val flag = tracked.country?.flag?.let { "$it " } ?: ""
@@ -176,7 +171,7 @@ fun SkyOverlay(
                     PlaneHit(
                         hex = tracked.aircraft.hex,
                         iconPos = pos,
-                        iconRadius = (22f * scale).coerceAtLeast(40f),
+                        iconRadius = 40f,
                         tag = tag,
                     )
                 )
@@ -195,10 +190,6 @@ private fun DrawScope.drawReticle(center: Offset) {
     drawLine(Color.White.copy(alpha = 0.25f), Offset(center.x + r, center.y), Offset(center.x + r + 14f, center.y), 1.5f)
 }
 
-private fun distanceScale(slantMeters: Double): Float {
-    val t = ((slantMeters - NEAR_M) / (FAR_M - NEAR_M)).coerceIn(0.0, 1.0)
-    return (MAX_SCALE + (MIN_SCALE - MAX_SCALE) * t).toFloat()
-}
 
 private fun DrawScope.drawPlaneIcon(pos: Offset, rotationDeg: Float, color: Color, scale: Float = 1.1f, stroke: Color) {
     val pts = listOf(

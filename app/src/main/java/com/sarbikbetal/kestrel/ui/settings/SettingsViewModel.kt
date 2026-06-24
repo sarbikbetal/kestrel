@@ -5,6 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.sarbikbetal.kestrel.settings.AltitudeUnit
 import com.sarbikbetal.kestrel.settings.MapType
+import com.sarbikbetal.kestrel.settings.PositionSource
+import com.sarbikbetal.kestrel.settings.RouteSource
 import com.sarbikbetal.kestrel.settings.SettingsRepository
 import com.sarbikbetal.kestrel.settings.SpeedUnit
 import com.sarbikbetal.kestrel.settings.TimeFormat
@@ -27,4 +29,6 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     fun setMapType(type: MapType) = viewModelScope.launch { repository.setMapType(type) }
     fun setShowAircraft(show: Boolean) = viewModelScope.launch { repository.setShowAircraft(show) }
     fun setShowHeadingCone(show: Boolean) = viewModelScope.launch { repository.setShowHeadingCone(show) }
+    fun setPositionSource(source: PositionSource) = viewModelScope.launch { repository.setPositionSource(source) }
+    fun setRouteSource(source: RouteSource) = viewModelScope.launch { repository.setRouteSource(source) }
 }

@@ -13,14 +13,18 @@ import kotlin.math.hypot
 
 /**
  * Where the back camera is pointing, in world terms.
- *  - [azimuthDeg]   compass bearing of the pointing direction (0 = North, 90 = East)
- *  - [elevationDeg] angle above the horizon (0 = level, 90 = straight up)
- *  - [rollDeg]      rotation about the viewing axis, used to keep overlays upright
+ *  - [azimuthDeg]      compass bearing of the pointing direction (0 = North, 90 = East)
+ *  - [elevationDeg]    angle above the horizon (0 = level, 90 = straight up)
+ *  - [rollDeg]         rotation about the viewing axis, used to keep overlays upright
+ *  - [compassAccuracy] SensorManager accuracy constant (3=high, 2=medium, 1=low,
+ *                      0=unreliable, -1=not yet received). Reflects how well the
+ *                      magnetometer is calibrated, which drives the fused rotation quality.
  */
 data class DeviceOrientation(
     val azimuthDeg: Float,
     val elevationDeg: Float,
     val rollDeg: Float,
+    val compassAccuracy: Int = -1,
 )
 
 class OrientationProvider(context: Context) {
@@ -45,6 +49,8 @@ class OrientationProvider(context: Context) {
         var srx = 0f; var sry = 0f
         var seeded = false
         val alpha = 0.15f // low-pass factor; smaller = smoother but laggier
+
+        var lastAccuracy = -1
 
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
@@ -76,17 +82,23 @@ class OrientationProvider(context: Context) {
                 val azimuth = ((Math.toDegrees(atan2(se.toDouble(), sn.toDouble())) + 360.0) % 360.0)
                 val elevation = Math.toDegrees(atan2(su.toDouble(), horiz))
                 val roll = Math.toDegrees(atan2(srx.toDouble(), sry.toDouble()))
+                // event.accuracy reflects magnetometer calibration quality,
+                // which drives the overall rotation-vector fusion accuracy.
+                if (lastAccuracy == -1) lastAccuracy = event.accuracy
 
                 trySend(
                     DeviceOrientation(
                         azimuthDeg = azimuth.toFloat(),
                         elevationDeg = elevation.toFloat(),
                         rollDeg = roll.toFloat(),
+                        compassAccuracy = lastAccuracy,
                     )
                 )
             }
 
-            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+                lastAccuracy = accuracy
+            }
         }
 
         sensorManager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_GAME)

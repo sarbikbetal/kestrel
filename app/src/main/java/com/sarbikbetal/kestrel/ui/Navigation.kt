@@ -149,9 +149,12 @@ fun AppNav(
                 val prefs by settingsViewModel.prefs.collectAsStateWithLifecycle()
                 SettingsScreen(
                     prefs = prefs,
+                    compassAccuracy = state.orientation.compassAccuracy,
                     onSpeedUnit = settingsViewModel::setSpeedUnit,
                     onAltitudeUnit = settingsViewModel::setAltitudeUnit,
                     onTimeFormat = settingsViewModel::setTimeFormat,
+                    onPositionSource = settingsViewModel::setPositionSource,
+                    onRouteSource = settingsViewModel::setRouteSource,
                 )
             }
         }

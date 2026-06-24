@@ -81,28 +81,73 @@ downloads the SDK, then it is cached:
 docker build --platform linux/amd64 -t android-builder .
 ```
 
-## Build
+## Local build (Docker, recommended)
+
+These commands are for local development speed. CI/release builds are handled separately by
+GitHub Actions workflow(s).
+
+If you prefer shortcuts, use Make targets:
+
+```bash
+make help
+```
 
 Build a debug APK without installing:
 
 ```bash
 ./build.sh --build-only
+# or: make build
 ```
 
 Output: `app/build/outputs/apk/debug/app-debug.apk`.
 
-The first build downloads Gradle, the Android Gradle Plugin, and all dependencies (several
-minutes). These are cached in a Docker volume (`kestrel-gradle-cache`), so later builds are
-much faster.
-
-You can also invoke Gradle directly inside the container if needed:
+Build + install to a connected device:
 
 ```bash
-docker run --rm --platform linux/amd64 \
-  -v "$(pwd):/project" \
-  -v "kestrel-gradle-cache:/root/.gradle" \
-  android-builder \
-  ./gradlew assembleDebug
+./build.sh
+# or: make install
+```
+
+Release variants:
+
+```bash
+./build.sh --release   # APK
+./build.sh --bundle    # AAB
+# or: make release / make bundle
+```
+
+### How `build.sh` works now
+
+`build.sh` is optimized for local iteration speed:
+
+- Reuses a persistent container: `kestrel-builder-dev`
+- Reuses volumes:
+  - `kestrel-gradle-cache` (`/root/.gradle`)
+  - `kestrel-android-home` (`/root/.android`, includes debug keystore)
+- Runs Gradle with `docker exec` so the Gradle daemon can stay warm between builds
+
+The first build downloads Gradle and dependencies; later builds are much faster.
+
+### Container maintenance (optional)
+
+If local build state ever gets weird, reset the dev container:
+
+```bash
+docker rm -f kestrel-builder-dev
+# or: make reset-container
+```
+
+To also clear caches:
+
+```bash
+docker volume rm kestrel-gradle-cache kestrel-android-home
+# or: make reset-caches
+```
+
+You can still run Gradle manually inside the persistent dev container:
+
+```bash
+docker exec kestrel-builder-dev ./gradlew assembleDebug
 ```
 
 ## Run / deploy to a physical device
@@ -120,21 +165,21 @@ docker run --rm --platform linux/amd64 \
    ./build.sh
    ```
 
-   This builds the APK in Docker, then `adb install -r`'s it onto the connected phone.
+   This builds the APK in Docker, then installs it with `adb install -r`.
 
 On first launch, grant **camera** and **location** permissions for the full AR experience.
 
 ## Test
 
-Run unit tests inside the container:
+Run unit tests with the local builder container:
 
 ```bash
-docker run --rm --platform linux/amd64 \
-  -v "$(pwd):/project" \
-  -v "kestrel-gradle-cache:/root/.gradle" \
-  android-builder \
-  ./gradlew test
+docker exec kestrel-builder-dev ./gradlew test
+# or: make test
 ```
+
+If the container is not running yet, run `./build.sh --build-only` once first (it creates/starts
+`kestrel-builder-dev`).
 
 Instrumented tests (`connectedAndroidTest`) require a connected device or emulator; since
 the device is attached to the host rather than the container, run those against a phone via

@@ -30,6 +30,10 @@ class SettingsRepository(context: Context) {
                 ?: MapType.STANDARD,
             showAircraft = p[KEY_SHOW_AIRCRAFT] ?: true,
             showHeadingCone = p[KEY_SHOW_CONE] ?: true,
+            positionSource = p[KEY_POSITION_SOURCE]?.let { runCatching { PositionSource.valueOf(it) }.getOrNull() }
+                ?: PositionSource.ADSB_LOL,
+            routeSource = p[KEY_ROUTE_SOURCE]?.let { runCatching { RouteSource.valueOf(it) }.getOrNull() }
+                ?: RouteSource.HEXDB,
         )
     }
 
@@ -55,6 +59,14 @@ class SettingsRepository(context: Context) {
 
     suspend fun setShowHeadingCone(show: Boolean) {
         ds.edit { it[KEY_SHOW_CONE] = show }
+    }
+
+    suspend fun setPositionSource(source: PositionSource) {
+        ds.edit { it[KEY_POSITION_SOURCE] = source.name }
+    }
+
+    suspend fun setRouteSource(source: RouteSource) {
+        ds.edit { it[KEY_ROUTE_SOURCE] = source.name }
     }
 
     /** Persists the most recent GPS fix so it survives process restarts. */
@@ -87,6 +99,8 @@ class SettingsRepository(context: Context) {
         val KEY_MAP_TYPE = stringPreferencesKey("map_type")
         val KEY_SHOW_AIRCRAFT = booleanPreferencesKey("show_aircraft")
         val KEY_SHOW_CONE = booleanPreferencesKey("show_heading_cone")
+        val KEY_POSITION_SOURCE = stringPreferencesKey("position_source")
+        val KEY_ROUTE_SOURCE = stringPreferencesKey("route_source")
         // Last known GPS fix
         val KEY_LOC_LAT = doublePreferencesKey("loc_lat")
         val KEY_LOC_LON = doublePreferencesKey("loc_lon")

@@ -2,6 +2,7 @@ package com.sarbikbetal.kestrel.data
 
 import android.util.Log
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
+import com.sarbikbetal.kestrel.settings.PositionSource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -25,25 +26,26 @@ class AircraftRepository(
 ) {
     /**
      * Emits aircraft near the supplied location on a fixed [intervalMs] cadence.
-     * The provider lambda lets callers feed the latest known location each tick.
+     * [locationProvider] and [sourceProvider] are polled each tick so callers can
+     * feed the latest location and preferred source without restarting the flow.
+     * On non-429 failure the secondary source is tried automatically.
      */
     fun stream(
         intervalMs: Long = 8_000L,
         maxBackoffMs: Long = 60_000L,
         radiusNm: Int = 150,
         locationProvider: () -> Pair<Double, Double>?,
+        sourceProvider: () -> PositionSource = { PositionSource.ADSB_LOL },
     ): Flow<AircraftResult> = flow {
-        // Grows on 429 (rate limit) and resets to [intervalMs] after a clean fetch.
         var backoffMs = intervalMs
         while (true) {
             val loc = locationProvider()
             var waitMs = intervalMs
             if (loc != null) {
                 val (lat, lon) = loc
+                val source = sourceProvider()
                 try {
-                    val resp = api.aircraftNear(lat, lon, radiusNm)
-                    val planes = resp.ac.mapNotNull { it.toDomainOrNull() }
-                        .filter { !it.onGround }
+                    val planes = fetchWithFallback(source, lat, lon, radiusNm)
                     backoffMs = intervalMs
                     emit(AircraftResult.Success(planes, waitMs))
                 } catch (e: HttpException) {
@@ -67,8 +69,35 @@ class AircraftRepository(
         }
     }
 
+    /**
+     * Tries [primary], falls back to the secondary source on any non-429 failure.
+     * Throws if both fail (or if the error is a 429).
+     */
+    private suspend fun fetchWithFallback(
+        primary: PositionSource,
+        lat: Double,
+        lon: Double,
+        radiusNm: Int,
+    ): List<Aircraft> {
+        return try {
+            fetchFrom(primary.urlFor(lat, lon, radiusNm))
+        } catch (e: HttpException) {
+            if (e.code() == 429) throw e
+            Log.w(TAG, "${primary.label} failed (${e.code()}), trying ${primary.secondary().label}")
+            fetchFrom(primary.secondary().urlFor(lat, lon, radiusNm))
+        } catch (e: Exception) {
+            Log.w(TAG, "${primary.label} failed, trying ${primary.secondary().label}: ${e.message}")
+            fetchFrom(primary.secondary().urlFor(lat, lon, radiusNm))
+        }
+    }
+
+    private suspend fun fetchFrom(url: String): List<Aircraft> =
+        api.aircraftNear(url).ac.mapNotNull { it.toDomainOrNull() }.filter { !it.onGround }
+
     companion object {
         private const val TAG = "AircraftRepository"
+        // Placeholder base URL — overridden per-call via @Url in AdsbApi.
+        private const val RETROFIT_BASE = "https://api.adsb.lol/"
 
         fun defaultApi(): AdsbApi {
             val json = Json {
@@ -85,7 +114,7 @@ class AircraftRepository(
                 .build()
             val contentType = "application/json".toMediaType()
             return Retrofit.Builder()
-                .baseUrl(AdsbApi.BASE_URL)
+                .baseUrl(RETROFIT_BASE)
                 .client(client)
                 .addConverterFactory(json.asConverterFactory(contentType))
                 .build()

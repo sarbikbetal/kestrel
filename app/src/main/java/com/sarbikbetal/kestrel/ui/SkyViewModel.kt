@@ -91,6 +91,11 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
     private val routeRepository = RouteRepository()
     private val settingsRepository = SettingsRepository(app)
 
+    // Eagerly-shared prefs so source-provider lambdas always see the latest value
+    // without needing a second subscriber to the settings flow.
+    private val currentPrefs = settingsRepository.prefs
+        .stateIn(viewModelScope, SharingStarted.Eagerly, UserPrefs())
+
     private val _location = MutableStateFlow<UserLocation?>(null)
     val location: StateFlow<UserLocation?> = _location.asStateFlow()
 
@@ -135,7 +140,7 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
             }
             val seen = HashSet<String>(snap.planes.size)
             val tracked = snap.planes.map { p ->
-                val (targetLat, targetLon) = extrapolate(p, elapsedSec)
+                val (targetLat, targetLon, targetAlt) = extrapolate(p, elapsedSec)
                 seen += p.hex
                 val cur = displayedPos[p.hex]
                 val lat: Double
@@ -154,7 +159,7 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
                     obsAltM = loc.altitudeMeters,
                     planeLat = lat,
                     planeLon = lon,
-                    planeAltM = p.altitudeMeters,
+                    planeAltM = targetAlt,
                 )
                 val skyAhead = p.headingDeg?.let { hdg ->
                     val (aLat, aLon) = SkyMath.destinationPoint(lat, lon, hdg, HEADING_STEP_M)
@@ -164,7 +169,7 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
                         obsAltM = loc.altitudeMeters,
                         planeLat = aLat,
                         planeLon = aLon,
-                        planeAltM = p.altitudeMeters,
+                        planeAltM = targetAlt,
                     )
                 }
                 TrackedPlane(
@@ -235,6 +240,7 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
                 intervalMs = 5_000L,
                 radiusNm = 100,
                 locationProvider = { _location.value?.let { it.lat to it.lon } },
+                sourceProvider = { currentPrefs.value.positionSource },
             ).collect { result ->
                 val now = SystemClock.elapsedRealtime()
                 when (result) {
@@ -265,7 +271,7 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
                 // Route is one-shot per callsign (cached with 10-min TTL).
                 val plane = _snapshot.value.planes.firstOrNull { it.hex == hex }
                 if (plane != null) {
-                    routeRepository.fetch(plane.callsign, hex, plane.lat, plane.lon).fold(
+                    routeRepository.fetch(plane.callsign, hex, plane.lat, plane.lon, currentPrefs.value.routeSource).fold(
                         onSuccess = { details -> _route.value = RouteState(details = details) },
                         onFailure = { e -> _route.value = RouteState(error = e.message) },
                     )
@@ -301,15 +307,22 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
         _selectedHex.value = null
     }
 
-    /** Predicted position of [p] after [elapsedSec], or its last known position. */
-    private fun extrapolate(p: Aircraft, elapsedSec: Double): Pair<Double, Double> {
+    /**
+     * Predicted position of [p] after [elapsedSec] plus any age already baked into
+     * the API snapshot (seen_pos). Returns (lat, lon, altMeters).
+     */
+    private fun extrapolate(p: Aircraft, elapsedSec: Double): Triple<Double, Double, Double> {
+        // seen_pos: position was already this many seconds old when the snapshot arrived.
+        val effectiveSec = (elapsedSec + p.seenPosSec).coerceIn(0.0, MAX_EXTRAPOLATION_SEC)
+        val predAlt = p.altitudeMeters + (p.verticalRateMps ?: 0.0) * effectiveSec
         val speed = p.groundSpeedKnots
         val heading = p.headingDeg
-        if (elapsedSec <= 0.0 || speed == null || speed <= 0.0 || heading == null) {
-            return p.lat to p.lon
+        if (effectiveSec <= 0.0 || speed == null || speed <= 0.0 || heading == null) {
+            return Triple(p.lat, p.lon, predAlt)
         }
-        val distanceM = speed * KNOTS_TO_MPS * elapsedSec
-        return SkyMath.destinationPoint(p.lat, p.lon, heading, distanceM)
+        val distanceM = speed * KNOTS_TO_MPS * effectiveSec
+        val (lat, lon) = SkyMath.destinationPoint(p.lat, p.lon, heading, distanceM)
+        return Triple(lat, lon, predAlt)
     }
 
     /** Begin location updates; call only after ACCESS_FINE_LOCATION is granted. */

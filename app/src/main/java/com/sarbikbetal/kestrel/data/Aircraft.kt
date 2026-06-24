@@ -17,9 +17,14 @@ data class Aircraft(
     /** ADS-B emitter category (e.g. "A1".."A7"), a proxy for aircraft size. */
     val category: String?,
     val onGround: Boolean,
+    /** Seconds since the position fix was last observed at the receiver (from seen_pos). */
+    val seenPosSec: Double,
+    /** Climb/descent rate in m/s from baro_rate; positive = climbing. */
+    val verticalRateMps: Double?,
 )
 
 private const val FEET_TO_METERS = 0.3048
+private const val FPM_TO_MPS = 0.00508
 
 fun AircraftDto.toDomainOrNull(): Aircraft? {
     val h = hex ?: return null
@@ -38,5 +43,7 @@ fun AircraftDto.toDomainOrNull(): Aircraft? {
         headingDeg = trueHeading ?: track,
         category = category?.trim()?.ifEmpty { null },
         onGround = isOnGround,
+        seenPosSec = seenPos ?: 0.0,
+        verticalRateMps = baroRate?.let { it * FPM_TO_MPS },
     )
 }

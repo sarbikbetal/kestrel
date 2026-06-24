@@ -6,6 +6,7 @@ GRADLE_CACHE="kestrel-gradle-cache"
 # Persists the auto-generated debug.keystore so every build is signed with the
 # same key (otherwise installs fail with INSTALL_FAILED_UPDATE_INCOMPATIBLE).
 ANDROID_HOME_CACHE="kestrel-android-home"
+CONTAINER_NAME="kestrel-builder-dev"
 APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
 
 # Parse flags
@@ -27,14 +28,37 @@ elif [ "$TASK" = "bundleRelease" ]; then
     APK_PATH="app/build/outputs/bundle/release/app-release.aab"
 fi
 
-echo "▶ Building APK inside Docker..."
-docker run --rm \
-    --platform linux/amd64 \
-    -v "$(pwd):/project" \
-    -v "$GRADLE_CACHE:/root/.gradle" \
-    -v "$ANDROID_HOME_CACHE:/root/.android" \
-    "$IMAGE" \
-    ./gradlew $TASK
+PROJECT_DIR="$(pwd)"
+
+ensure_builder_container() {
+    local existing_project_mount=""
+    existing_project_mount=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/project"}}{{.Source}}{{end}}{{end}}' "$CONTAINER_NAME" 2>/dev/null || true)
+
+    if [ -n "$existing_project_mount" ] && [ "$existing_project_mount" != "$PROJECT_DIR" ]; then
+        echo "▶ Recreating local builder container (project path changed)..."
+        docker rm -f "$CONTAINER_NAME" >/dev/null
+    fi
+
+    if ! docker ps -a --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
+        echo "▶ Creating persistent local builder container..."
+        docker run -d \
+            --platform linux/amd64 \
+            --name "$CONTAINER_NAME" \
+            -w /project \
+            -v "$PROJECT_DIR:/project" \
+            -v "$GRADLE_CACHE:/root/.gradle" \
+            -v "$ANDROID_HOME_CACHE:/root/.android" \
+            "$IMAGE" \
+            tail -f /dev/null >/dev/null
+    elif ! docker ps --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
+        echo "▶ Starting persistent local builder container..."
+        docker start "$CONTAINER_NAME" >/dev/null
+    fi
+}
+
+echo "▶ Building APK inside local Docker builder..."
+ensure_builder_container
+docker exec "$CONTAINER_NAME" ./gradlew "$TASK"
 
 if [ "$INSTALL" = true ]; then
     echo ""

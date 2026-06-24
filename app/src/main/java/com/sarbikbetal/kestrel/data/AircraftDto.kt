@@ -36,6 +36,7 @@ data class AircraftDto(
     @SerialName("true_heading") val trueHeading: Double? = null,
     val category: String? = null,
     @SerialName("seen_pos") val seenPos: Double? = null,
+    @SerialName("baro_rate") val baroRate: Double? = null,
     val dst: Double? = null,
     val dir: Double? = null,
 ) {

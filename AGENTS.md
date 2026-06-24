@@ -60,6 +60,7 @@ Use it as the default working agreement for code changes.
 
 - Keep Android SDK/toolchain changes intentional and documented.
 - Match Docker and CI SDK versions when changing `compileSdk`/`build-tools`.
+- A Docker container is available for building the app; prefer it when local toolchain/runtime setup is missing or inconsistent.
 - Do not commit secrets, signing keys, or local machine-specific configuration.
 
 ## Required Decision Log (Important)
@@ -80,6 +81,9 @@ Entry format (append newest on top):
 
 ## Decision Log
 
+- 2026-06-24 - Decision: Added a root `Makefile` for local developer ergonomics with Docker-oriented targets (`build`, `install`, `release`, `bundle`, `test`, and container/cache maintenance). Rationale: Provide short, discoverable commands for the local persistent-container workflow without affecting CI workflows. Impact: Faster onboarding and day-to-day local iteration; existing `build.sh` flow remains the underlying implementation.
+- 2026-06-24 - Decision: Optimized `build.sh` for local development by reusing a persistent Docker builder container (`kestrel-builder-dev`) instead of one-shot `docker run --rm`. Rationale: Reusing the same container allows Gradle daemon reuse and speeds up iterative local builds while CI remains handled by GitHub workflows. Impact: Faster local build loops; Dockerized local environment remains consistent with existing image/volumes.
+- 2026-06-24 - Decision: Documented Docker container availability as a standard app build path for agents. Rationale: Local environments may lack Java/Android toolchain prerequisites, while containerized builds provide a consistent setup. Impact: Agents can reliably validate builds using Docker when host setup is incomplete.
 - 2026-06-24 - Decision: Release builds fall back to debug signing when `keystore.properties` is absent so release APKs are installable locally and from CI. Rationale: Unsigned release APKs fail installation with "App not installed". Impact: `./build.sh --release` and GitHub releases produce signed APKs; production signing via `keystore.properties` when ready.
 - 2026-06-24 - Decision: Migrated app UI to Material 3 Expressive (MaterialExpressiveTheme, expressive motion/shapes, ModalBottomSheet for plane details and map layers, SegmentedButton settings, bottom navigation). Rationale: User-requested modern expressive design language across all screens. Impact: Visual refresh; HUD monospace styling removed; plane details and map layers use bottom sheets; nav bar hidden while a plane is selected.
 - 2026-06-24 - Decision: Added AGENTS.md project guide with Kotlin/Android best practices and mandatory decision logging. Rationale: Improve consistency and preserve context across AI-assisted changes. Impact: Future changes should be easier to review, reason about, and maintain.

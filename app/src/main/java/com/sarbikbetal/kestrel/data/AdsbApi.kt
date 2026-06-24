@@ -1,21 +1,13 @@
 package com.sarbikbetal.kestrel.data
 
 import retrofit2.http.GET
-import retrofit2.http.Path
+import retrofit2.http.Url
 
 interface AdsbApi {
     /**
-     * Returns aircraft within [distNm] nautical miles of the given point.
-     * adsb.lol caps the radius at 250 nm.
+     * Fetches aircraft near a point. The full URL is supplied by the caller so this
+     * single method works with any adsb.lol-compatible endpoint (adsb.lol, airplanes.live…).
      */
-    @GET("v2/lat/{lat}/lon/{lon}/dist/{dist}")
-    suspend fun aircraftNear(
-        @Path("lat") lat: Double,
-        @Path("lon") lon: Double,
-        @Path("dist") distNm: Int,
-    ): AdsbResponse
-
-    companion object {
-        const val BASE_URL = "https://api.adsb.lol/"
-    }
+    @GET
+    suspend fun aircraftNear(@Url url: String): AdsbResponse
 }

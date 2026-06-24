@@ -22,6 +22,25 @@ enum class MapType(val label: String) {
     HUMANITARIAN("Humanitarian"),
 }
 
+enum class PositionSource(val label: String) {
+    ADSB_LOL("adsb.lol"),
+    AIRPLANES_LIVE("airplanes.live");
+
+    fun secondary() = if (this == ADSB_LOL) AIRPLANES_LIVE else ADSB_LOL
+
+    fun urlFor(lat: Double, lon: Double, radiusNm: Int): String = when (this) {
+        ADSB_LOL -> "https://api.adsb.lol/v2/lat/$lat/lon/$lon/dist/$radiusNm"
+        AIRPLANES_LIVE -> "https://api.airplanes.live/v2/point/$lat/$lon/$radiusNm"
+    }
+}
+
+enum class RouteSource(val label: String) {
+    HEXDB("hexdb.io"),
+    ADSBDB("adsbdb.com");
+
+    fun secondary() = if (this == HEXDB) ADSBDB else HEXDB
+}
+
 data class UserPrefs(
     val speedUnit: SpeedUnit = SpeedUnit.KNOTS,
     val altitudeUnit: AltitudeUnit = AltitudeUnit.FEET,
@@ -29,4 +48,6 @@ data class UserPrefs(
     val mapType: MapType = MapType.STANDARD,
     val showAircraft: Boolean = true,
     val showHeadingCone: Boolean = true,
+    val positionSource: PositionSource = PositionSource.ADSB_LOL,
+    val routeSource: RouteSource = RouteSource.HEXDB,
 )

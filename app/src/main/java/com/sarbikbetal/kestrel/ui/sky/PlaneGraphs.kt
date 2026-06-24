@@ -23,6 +23,8 @@ import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.Material3ExpressiveApi
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -44,7 +46,6 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -274,6 +275,7 @@ private fun AirportColumn(
     }
 }
 
+@OptIn(Material3ExpressiveApi::class)
 @Composable
 private fun FlightProgress(details: FlightDetails, selected: TrackedPlane?, prefs: UserPrefs) {
     val oLat = details.originLat
@@ -284,7 +286,7 @@ private fun FlightProgress(details: FlightDetails, selected: TrackedPlane?, pref
     val pLon = selected?.lon
 
     if (oLat == null || oLon == null || dLat == null || dLon == null) {
-        ProgressTrack(fraction = 0.5f, indeterminate = true)
+        LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
         return
     }
 
@@ -294,7 +296,7 @@ private fun FlightProgress(details: FlightDetails, selected: TrackedPlane?, pref
     val total = (flownM + remainingM).coerceAtLeast(1.0)
     val fraction = (flownM / total).toFloat().coerceIn(0f, 1f)
 
-    ProgressTrack(fraction = fraction, indeterminate = false)
+    LinearWavyProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
 
     Spacer(Modifier.height(8.dp))
 
@@ -324,42 +326,6 @@ private fun FlightProgress(details: FlightDetails, selected: TrackedPlane?, pref
     }
 }
 
-@Composable
-private fun ProgressTrack(fraction: Float, indeterminate: Boolean) {
-    val primary = MaterialTheme.colorScheme.primary
-    val track = MaterialTheme.colorScheme.surfaceContainerHighest
-    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
-
-    Canvas(modifier = Modifier.fillMaxWidth().height(28.dp)) {
-        val yc = size.height / 2f
-        val x0 = 6f
-        val x1 = size.width - 6f
-        val xp = x0 + (x1 - x0) * fraction
-
-        drawLine(
-            color = track,
-            start = Offset(x0, yc),
-            end = Offset(x1, yc),
-            strokeWidth = 4f,
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f)),
-        )
-        if (!indeterminate) {
-            drawLine(primary, Offset(x0, yc), Offset(xp, yc), strokeWidth = 4f)
-            drawCircle(Color.White, radius = 5f, center = Offset(x0, yc))
-            drawCircle(track, radius = 6f, center = Offset(x1, yc))
-            drawCircle(onSurfaceVariant, radius = 6f, center = Offset(x1, yc), style = Stroke(2f))
-            val s = 9f
-            val path = Path().apply {
-                moveTo(xp + s, yc)
-                lineTo(xp - s, yc - s * 0.7f)
-                lineTo(xp - s * 0.4f, yc)
-                lineTo(xp - s, yc + s * 0.7f)
-                close()
-            }
-            drawPath(path, primary)
-        }
-    }
-}
 
 @Composable
 private fun FlightInfoGrid(selected: TrackedPlane?, details: FlightDetails?, prefs: UserPrefs) {
