@@ -40,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,6 +74,7 @@ import kotlin.random.Random
 @Composable
 fun ArSkyScreen(
     state: SkyUiState,
+    orientation: State<DeviceOrientation>,
     hasCameraPermission: Boolean,
     skyViewMode: SkyViewMode,
     onToggleSkyView: () -> Unit,
@@ -86,12 +88,12 @@ fun ArSkyScreen(
         if (showCamera) {
             CameraPreview(modifier = Modifier.fillMaxSize())
             SyntheticSky(
-                orientation = state.orientation,
+                orientation = orientation,
                 showStars = false,
                 modifier = Modifier.fillMaxSize().alpha(0.45f),
             )
         } else {
-            SyntheticSky(orientation = state.orientation, modifier = Modifier.fillMaxSize())
+            SyntheticSky(orientation = orientation, modifier = Modifier.fillMaxSize())
         }
 
         Box(
@@ -106,7 +108,7 @@ fun ArSkyScreen(
 
         SkyOverlay(
             planes = state.planes,
-            orientation = state.orientation,
+            orientation = orientation,
             prefs = state.prefs,
             selectedHex = state.selectedHex,
             onSelect = onSelectPlane,
@@ -119,7 +121,7 @@ fun ArSkyScreen(
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
-            HudCompass(state = state)
+            HudCompass(state = state, orientation = orientation)
 
             if (state.locationIsStale) {
                 StaleLocationChip(modifier = Modifier.padding(start = 16.dp, top = 8.dp))
@@ -228,9 +230,12 @@ private fun cardinalLabel(deg: Int): String = when (deg) {
 }
 
 @Composable
-private fun HudCompass(state: SkyUiState, modifier: Modifier = Modifier) {
+private fun HudCompass(
+    state: SkyUiState,
+    orientation: State<DeviceOrientation>,
+    modifier: Modifier = Modifier,
+) {
     val cs = MaterialTheme.colorScheme
-    val bearing   = state.orientation.compassBearingDeg
     val timeStr   = Formatters.clock(Date(), state.prefs.timeFormat)
     val countStr  = "${state.planes.size} ✈"
 
@@ -270,6 +275,9 @@ private fun HudCompass(state: SkyUiState, modifier: Modifier = Modifier) {
     Column(modifier = modifier) {
         // Single canvas: background shape + compass tape + info text.
         Canvas(modifier = Modifier.fillMaxWidth().height(92.dp)) {
+            // Read orientation in the draw phase so a heading change repaints the tape
+            // without recomposing HudCompass.
+            val bearing = orientation.value.compassBearingDeg
             val w     = size.width
             val h     = size.height
             val cx    = w / 2f
@@ -376,7 +384,7 @@ private fun StaleLocationChip(modifier: Modifier = Modifier) {
 
 @Composable
 private fun SyntheticSky(
-    orientation: DeviceOrientation,
+    orientation: State<DeviceOrientation>,
     showStars: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -388,16 +396,19 @@ private fun SyntheticSky(
         Array(150) { floatArrayOf(rng.nextFloat() * 360f, rng.nextFloat() * 80f, rng.nextFloat()) }
     }
     Canvas(modifier = modifier) {
+        // Read orientation in the draw phase: phone motion repaints the sky without
+        // recomposing this composable.
+        val o = orientation.value
         val h = size.height
         val w = size.width
         val cx = w / 2f
         val cy = h / 2f
 
         // horizonY: screen-space Y of the horizon centre (elevation only, no roll yet).
-        val horizonY = cy + (orientation.elevationDeg / 50f) * cy
+        val horizonY = cy + (o.elevationDeg / 50f) * cy
 
         // Roll angle: tilts the horizon line and sky/ground boundary.
-        val rollRad = orientation.rollDeg * (PI / 180.0)
+        val rollRad = o.rollDeg * (PI / 180.0)
         val tanR = tan(rollRad).toFloat()
 
         // Where the tilted horizon intersects the left (x=0) and right (x=w) screen edges.
@@ -459,10 +470,10 @@ private fun SyntheticSky(
             stars.forEach { s ->
                 // Azimuth delta uses compassBearingDeg so stars and planes share the same
                 // true-north reference frame and don't drift relative to each other.
-                val dAz = ((s[0] - orientation.compassBearingDeg + 540f) % 360f) - 180f
+                val dAz = ((s[0] - o.compassBearingDeg + 540f) % 360f) - 180f
                 // Raw offset from screen centre (no roll)
                 val rawDx = dAz * pixPerDeg
-                val rawDy = (orientation.elevationDeg - s[1]) * pixPerDeg
+                val rawDy = (o.elevationDeg - s[1]) * pixPerDeg
                 // Apply roll rotation around screen centre
                 val sx = cx + rawDx * rollCos - rawDy * rollSin
                 val sy = cy + rawDx * rollSin + rawDy * rollCos

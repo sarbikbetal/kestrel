@@ -53,7 +53,12 @@ class OrientationProvider(context: Context) {
     fun stream(): Flow<DeviceOrientation> = callbackFlow {
         if (gameSensor == null) { close(); return@callbackFlow }
 
-        val alpha = 0.15f // low-pass factor
+        // The game rotation vector is already gyro-fused and smooth, so the render
+        // path only needs a light EMA to shave high-frequency jitter. A heavy filter
+        // (the old alpha = 0.15) adds a ~110 ms first-order lag at SENSOR_DELAY_GAME,
+        // which is the "overlay drags behind the phone" feel. Keep it responsive.
+        val gameAlpha = 0.8f
+        val compassAlpha = 0.4f // display-only bearing; magnetometer noise needs a touch more
 
         // --- Game sensor state (stable azimuth / elevation / roll) ---
         val gameRot = FloatArray(9)
@@ -86,9 +91,9 @@ class OrientationProvider(context: Context) {
                 if (!gameSeeded) {
                     gse = east; gsn = north; gsu = up; gsrx = rx; gsry = ry; gameSeeded = true
                 } else {
-                    gse  += alpha * (east  - gse);  gsn  += alpha * (north - gsn)
-                    gsu  += alpha * (up    - gsu);  gsrx += alpha * (rx    - gsrx)
-                    gsry += alpha * (ry    - gsry)
+                    gse  += gameAlpha * (east  - gse);  gsn  += gameAlpha * (north - gsn)
+                    gsu  += gameAlpha * (up    - gsu);  gsrx += gameAlpha * (rx    - gsrx)
+                    gsry += gameAlpha * (ry    - gsry)
                 }
                 if (lastAccuracy == -1) lastAccuracy = event.accuracy
                 buildAndSend()
@@ -104,8 +109,8 @@ class OrientationProvider(context: Context) {
                 if (!compassSeeded) {
                     cse = east; csn = north; compassSeeded = true
                 } else {
-                    cse += alpha * (east  - cse)
-                    csn += alpha * (north - csn)
+                    cse += compassAlpha * (east  - cse)
+                    csn += compassAlpha * (north - csn)
                 }
             }
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {

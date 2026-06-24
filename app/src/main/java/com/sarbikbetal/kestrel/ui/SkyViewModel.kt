@@ -21,6 +21,7 @@ import com.sarbikbetal.kestrel.sensors.DeviceOrientation
 import com.sarbikbetal.kestrel.sensors.OrientationProvider
 import com.sarbikbetal.kestrel.settings.SettingsRepository
 import com.sarbikbetal.kestrel.settings.UserPrefs
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -31,6 +32,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -103,6 +105,18 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
     private val _locationIsLive = MutableStateFlow(false)
 
     private val _orientation = MutableStateFlow(DeviceOrientation(0f, 0f, 0f))
+
+    /**
+     * Raw, high-frequency (~50 Hz) orientation for the AR canvas only. Kept out of
+     * [uiState] so a phone rotation drives the canvas *draw* phase, not a recomposition
+     * of the whole screen (which would also re-run the osmdroid mini-map at 50 Hz).
+     */
+    val orientation: StateFlow<DeviceOrientation> = _orientation.asStateFlow()
+
+    // Throttled copy for the rest of the UI (mini-map bearing, compass accuracy):
+    // these only need ~10 Hz, so feeding uiState from this avoids 50 Hz state churn.
+    @OptIn(FlowPreview::class)
+    private val sampledOrientation: Flow<DeviceOrientation> = _orientation.sample(RENDER_INTERVAL_MS)
     private val _snapshot = MutableStateFlow(Snapshot(emptyList(), 0L))
     private val _error = MutableStateFlow<String?>(null)
     private val _pollStatus = MutableStateFlow(PollStatus())
@@ -195,7 +209,7 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
     val uiState: StateFlow<SkyUiState> =
         combine(
             _location,
-            _orientation,
+            sampledOrientation,
             trackedPlanes,
             misc,
             settingsRepository.prefs,

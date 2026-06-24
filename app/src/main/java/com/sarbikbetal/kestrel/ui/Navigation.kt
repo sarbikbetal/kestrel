@@ -47,6 +47,9 @@ fun AppNav(
 ) {
     val nav = rememberNavController()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    // Held as State (not read here) so the high-frequency orientation only invalidates
+    // the AR canvas's draw phase, never recomposes this whole nav tree.
+    val orientation = viewModel.orientation.collectAsStateWithLifecycle()
     val showBottomBar = state.selectedHex == null
 
     Scaffold(
@@ -115,6 +118,7 @@ fun AppNav(
                 val skyPrefs by settingsViewModel.prefs.collectAsStateWithLifecycle()
                 ArSkyScreen(
                     state = state,
+                    orientation = orientation,
                     hasCameraPermission = hasCameraPermission,
                     skyViewMode = skyPrefs.skyViewMode,
                     onToggleSkyView = {

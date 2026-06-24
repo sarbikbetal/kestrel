@@ -6,6 +6,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -80,7 +81,7 @@ private class PlaneHit(
 @Composable
 fun SkyOverlay(
     planes: List<TrackedPlane>,
-    orientation: DeviceOrientation,
+    orientation: State<DeviceOrientation>,
     prefs: UserPrefs,
     selectedHex: String?,
     onSelect: (String?) -> Unit,
@@ -129,6 +130,9 @@ fun SkyOverlay(
             }
         },
     ) {
+        // Read orientation in the draw phase: phone motion repositions every plane
+        // without recomposing the overlay.
+        val o = orientation.value
         val w = size.width
         val h = size.height
         val center = Offset(w / 2f, h / 2f)
@@ -141,9 +145,9 @@ fun SkyOverlay(
             val proj = SkyMath.project(
                 planeAzimuthDeg = tracked.sky.azimuthDeg,
                 planeElevationDeg = tracked.sky.elevationDeg,
-                deviceAzimuthDeg = orientation.compassBearingDeg.toDouble(),
-                deviceElevationDeg = orientation.elevationDeg.toDouble(),
-                deviceRollDeg = orientation.rollDeg.toDouble(),
+                deviceAzimuthDeg = o.compassBearingDeg.toDouble(),
+                deviceElevationDeg = o.elevationDeg.toDouble(),
+                deviceRollDeg = o.rollDeg.toDouble(),
                 widthPx = w,
                 heightPx = h,
             )
@@ -161,9 +165,9 @@ fun SkyOverlay(
                     val pa = SkyMath.project(
                         planeAzimuthDeg = it.azimuthDeg,
                         planeElevationDeg = it.elevationDeg,
-                        deviceAzimuthDeg = orientation.compassBearingDeg.toDouble(),
-                        deviceElevationDeg = orientation.elevationDeg.toDouble(),
-                        deviceRollDeg = orientation.rollDeg.toDouble(),
+                        deviceAzimuthDeg = o.compassBearingDeg.toDouble(),
+                        deviceElevationDeg = o.elevationDeg.toDouble(),
+                        deviceRollDeg = o.rollDeg.toDouble(),
                         widthPx = w,
                         heightPx = h,
                     )
