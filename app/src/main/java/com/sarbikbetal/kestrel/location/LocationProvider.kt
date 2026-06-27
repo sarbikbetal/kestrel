@@ -2,6 +2,8 @@ package com.sarbikbetal.kestrel.location
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.location.LocationManager
+import androidx.core.location.LocationManagerCompat
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
@@ -19,9 +21,15 @@ data class UserLocation(
     val accuracyMeters: Float,
 )
 
-class LocationProvider(context: Context) {
+class LocationProvider(private val context: Context) {
 
     private val client = LocationServices.getFusedLocationProviderClient(context)
+
+    /** Whether the device's location services (GPS / network) are currently switched on. */
+    fun isLocationEnabled(): Boolean {
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        return LocationManagerCompat.isLocationEnabled(lm)
+    }
 
     /**
      * Streams fused location updates. Caller must hold ACCESS_FINE_LOCATION
@@ -29,7 +37,7 @@ class LocationProvider(context: Context) {
      */
     @SuppressLint("MissingPermission")
     fun stream(intervalMs: Long = 2_000L): Flow<UserLocation> = callbackFlow {
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, intervalMs)
+        val request = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, intervalMs)
             .setMinUpdateIntervalMillis(1_000L)
             .build()
 

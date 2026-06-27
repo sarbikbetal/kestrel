@@ -43,9 +43,22 @@ Use it as the default working agreement for code changes.
 - Centralize shared business logic; avoid duplicate calculations across screens.
 - When introducing a new pattern, update this file and explain why the pattern is needed.
 
+## Build Commands
+
+Use `make` targets for all local build and verification tasks — do not invoke `build.sh` or `gradlew` directly.
+
+| Command | Purpose |
+|---|---|
+| `make build` | Build debug APK (no install) |
+| `make install` | Build + install debug APK to connected device |
+| `make release` | Build release APK |
+| `make bundle` | Build release AAB |
+| `make test` | Run unit tests |
+| `make image` | (Re)build the Docker builder image |
+| `make up` / `make down` | Start / stop the persistent dev container |
+
 ## Testing and Verification Expectations
 
-- Validate build behavior for touched paths before finishing (`assembleDebug` minimum when feasible).
 - For non-trivial logic, add or update tests when the project already has an appropriate test location.
 - For UI behavior changes, include manual verification notes in PR/commit message.
 
@@ -60,7 +73,7 @@ Use it as the default working agreement for code changes.
 
 - Keep Android SDK/toolchain changes intentional and documented.
 - Match Docker and CI SDK versions when changing `compileSdk`/`build-tools`.
-- A Docker container is available for building the app; prefer it when local toolchain/runtime setup is missing or inconsistent.
+- A Docker container is available for building the app via `make`; prefer it when local toolchain/runtime setup is missing or inconsistent.
 - Do not commit secrets, signing keys, or local machine-specific configuration.
 
 ## Required Decision Log (Important)
@@ -81,6 +94,8 @@ Entry format (append newest on top):
 
 ## Decision Log
 
+- 2026-06-28 - Decision: Fixed janky horizontal (azimuth) panning in the AR view with a complementary heading filter in `OrientationProvider`. Rendering and the compass display read `compassBearingDeg`, which was previously the raw `TYPE_ROTATION_VECTOR` magnetometer bearing updated only at `SENSOR_DELAY_UI` (~16 Hz) with a heavy EMA — so side-to-side motion stepped/lagged while tilt (game-sensor elevation/roll at ~50 Hz) stayed smooth. `compassBearingDeg` is now the smooth 50 Hz game-sensor azimuth re-anchored to true north via a slowly-tracked offset (`headingOffset`, `offsetAlpha = 0.05`) updated from the compass listener. Rationale: keep planes north-locked (the reason compass was used) while updating heading at the game-sensor rate; slow offset tracking rides fast pans on the smooth gyro signal and only corrects gradual game-azimuth drift. Impact: horizontal panning is now as smooth as vertical; heading display also benefits. Fallback devices (no game sensor) keep using the already-north-aligned rotation vector unchanged.
+- 2026-06-28 - Decision: Moved per-frame work out of the AR draw phase. `SkyOverlay` now pre-formats each plane's tag strings (callsign/altitude/speed/distance via `Formatters` + `String.format`) in a `remember(planes, prefs)` block and caches the `take(60)` visible list, instead of recomputing them inside the ~50 Hz orientation-driven canvas redraw. `SyntheticSky` (sky/ground polygons) and `HudCompass` (scoop background) now reuse remembered `Path` objects cleared with `rewind()` instead of allocating a new `Path` every draw. Rationale: the AR canvases redraw at sensor rate (~50 Hz) while their string/Path inputs only change at ~10 Hz; per-frame `String.format` and `Path()` allocations were avoidable GC pressure in the hottest render path (confirmed against current Compose graphics docs recommending `remember`/`drawWithCache` + `Path.rewind`). Impact: lower allocation/GC churn and steadier AR frame times; no visual or behavioral change.
 - 2026-06-24 - Decision: AR sky/camera toggle now uses `AutoAwesome` (synthetic sky) and `Videocam` (live camera) icons, and all FABs (AR toggle, map layers, map recenter) use the Material 3 Expressive squared default shapes (`FloatingActionButtonDefaults.shape`/`smallShape`) instead of `shapes.largeIncreased`. Rationale: clearer affordance for the view toggle and consistent expressive squared FAB language. Impact: visual-only.
 - 2026-06-24 - Decision: Decoupled high-frequency device orientation from `SkyUiState` and lightened the orientation EMA. `SkyViewModel` now exposes a raw ~50 Hz `orientation: StateFlow<DeviceOrientation>` for the AR canvas while `uiState` is fed a 10 Hz `sample()`-throttled copy; the AR canvases (`SyntheticSky`, `SkyOverlay`, `HudCompass`) take `State<DeviceOrientation>` and read it in the draw phase, and `OrientationProvider` uses `gameAlpha = 0.5` for the render path. Rationale: orientation in the single UI-state object forced a 50 Hz recomposition of the whole tree (incl. the osmdroid mini-map), and the heavy `alpha = 0.15` filter added ~110 ms tracking lag. Impact: AR overlay tracks the phone smoothly with far less jank; mini-map/compass/settings now refresh at 10 Hz instead of 50 Hz. Compass bearing (display only) keeps the heavier `compassAlpha = 0.15`.
 - 2026-06-25 - Decision: Added 2 new themes Astro Red (OLED black, deep red, amber accents, expressive rounded shapes) and Avionics Green (dark charcoal, phosphor green, amber alerts, monospace typography, sharp 0dp corners, CRT scanline overlay). Default is Material You. Theme persisted in DataStore. Rationale: Night-sky observers need minimal blue light; aviation enthusiasts wanted a retro CRT HUD aesthetic. Impact: Both themes are always dark; dynamic colour and light mode are removed entirely. Scanlines applied globally as a `Modifier.drawWithContent` overlay when Avionics Green is active.
@@ -88,5 +103,5 @@ Entry format (append newest on top):
 - 2026-06-24 - Decision: Optimized `build.sh` for local development by reusing a persistent Docker builder container (`kestrel-builder-dev`) instead of one-shot `docker run --rm`. Rationale: Reusing the same container allows Gradle daemon reuse and speeds up iterative local builds while CI remains handled by GitHub workflows. Impact: Faster local build loops; Dockerized local environment remains consistent with existing image/volumes.
 - 2026-06-24 - Decision: Documented Docker container availability as a standard app build path for agents. Rationale: Local environments may lack Java/Android toolchain prerequisites, while containerized builds provide a consistent setup. Impact: Agents can reliably validate builds using Docker when host setup is incomplete.
 - 2026-06-24 - Decision: Release builds fall back to debug signing when `keystore.properties` is absent so release APKs are installable locally and from CI. Rationale: Unsigned release APKs fail installation with "App not installed". Impact: `./build.sh --release` and GitHub releases produce signed APKs; production signing via `keystore.properties` when ready.
-- 2026-06-24 - Decision: Migrated app UI to Material 3 Expressive (MaterialExpressiveTheme, expressive motion/shapes, ModalBottomSheet for plane details and map layers, SegmentedButton settings, bottom navigation). Rationale: User-requested modern expressive design language across all screens. Impact: Visual refresh; HUD monospace styling removed; plane details and map layers use bottom sheets; nav bar hidden while a plane is selected.
+- 2026-06-24 - Decision: Migrated app UI to Material 3 Expressive (MaterialExpressiveTheme, expressive motion/shapes, ModalBottomSheet for plane details and map layers, SegmentedButton settings, bottom navigation). Rationale: User-requested modern expressive design language across all screens. Impact: Visual refresh; HUD monospace styling removed; plane details and map layers use bottom sheets.
 - 2026-06-24 - Decision: Added AGENTS.md project guide with Kotlin/Android best practices and mandatory decision logging. Rationale: Improve consistency and preserve context across AI-assisted changes. Impact: Future changes should be easier to review, reason about, and maintain.

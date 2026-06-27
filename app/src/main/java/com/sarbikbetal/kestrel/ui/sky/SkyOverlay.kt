@@ -2,11 +2,15 @@ package com.sarbikbetal.kestrel.ui.sky
 
 import android.graphics.Paint
 import android.graphics.Typeface
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -54,6 +58,7 @@ private val HINT_ARROW_PATH: Path = Path().apply {
 }
 
 private val ICON_STROKE = Stroke(2f)
+private const val CROSSHAIR_RADIUS_PX = 55f
 
 private fun formatDistKm(meters: Double): String {
     val km = meters / 1_000.0
@@ -78,6 +83,22 @@ private class PlaneHit(
         (iconPos - tap).getDistance() <= iconRadius || tag.contains(tap.x, tap.y)
 }
 
+/** Pre-formatted tag strings for a plane. Built off the draw path (data changes
+ *  at ~10 Hz) so the 50 Hz canvas redraw never re-runs Formatters/String.format.
+ *  Two short data lines keep the tag proportionate: distance, then altitude · speed. */
+private class PlaneLabel(val title: String, val line1: String, val line2: String)
+
+/** Render data for the crosshair-focused plane, deferred so its enlarged tag
+ *  always paints on the top layer (after every other plane in the frame). */
+private class DeferredFocus(
+    val hex: String,
+    val pos: Offset,
+    val color: Color,
+    val screenRot: Float?,
+    val selected: Boolean,
+    val label: PlaneLabel,
+)
+
 @Composable
 fun SkyOverlay(
     planes: List<TrackedPlane>,
@@ -89,35 +110,58 @@ fun SkyOverlay(
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val planeStroke = colorScheme.surface
-    val tagBg = colorScheme.surfaceContainerHigh.copy(alpha = 0.94f)
-    val titleColor = colorScheme.onSurface
-    val subColor = colorScheme.onSurfaceVariant
+    val tagBg = Color(0xFF0F131B).copy(alpha = 0.82f)
+    val tagBorder = Color.White.copy(alpha = 0.16f)
+    val titleColor = Color.White
+    val subColor = Color.White.copy(alpha = 0.66f)
     val hintColor = colorScheme.tertiary
     val selectionRing = colorScheme.primary
 
+    // Tracks the single plane closest to the crosshair (null = none within threshold).
+    val nearHexState = remember { mutableStateOf<String?>(null) }
+    val tagScale = remember { Animatable(1f) }
+    LaunchedEffect(nearHexState.value) {
+        val expanding = nearHexState.value != null
+        tagScale.animateTo(
+            targetValue = if (expanding) 1.45f else 1f,
+            animationSpec = tween(durationMillis = if (expanding) 300 else 150),
+        )
+    }
+
+    // Cap at 60 and pre-format labels off the draw path. `planes` changes at ~10 Hz,
+    // so this recomputes far less often than the 50 Hz orientation-driven redraw.
+    val visible = remember(planes) { planes.take(60) }
+    val labels = remember(visible, prefs) {
+        visible.map { tracked ->
+            val flag = tracked.country?.flag?.let { "$it " } ?: ""
+            val alt = Formatters.altitude(tracked.aircraft.altitudeMeters, prefs.altitudeUnit)
+            val spd = Formatters.speed(tracked.aircraft.groundSpeedKnots, prefs.speedUnit)
+            val dist = formatDistKm(tracked.sky.slantDistanceMeters)
+            PlaneLabel(
+                title = "$flag${tracked.aircraft.callsign}",
+                line1 = "$alt · $spd",
+                line2 = dist,
+            )
+        }
+    }
+
     val hitTargets = remember { ArrayList<PlaneHit>(64) }
-    val titlePaint = remember(titleColor) {
+    val titlePaint = remember {
         Paint().apply {
             isAntiAlias = true
             color = titleColor.toArgb()
-            textSize = 30f
+            textSize = 36f
             typeface = Typeface.DEFAULT_BOLD
+            letterSpacing = 0.04f
         }
     }
-    val subPaint = remember(subColor) {
+    val subPaint = remember {
         Paint().apply {
             isAntiAlias = true
             color = subColor.toArgb()
-            textSize = 24f
+            textSize = 27f
             typeface = Typeface.DEFAULT
-        }
-    }
-    val distPaint = remember(subColor) {
-        Paint().apply {
-            isAntiAlias = true
-            color = subColor.copy(alpha = 0.75f).toArgb()
-            textSize = 21f
-            typeface = Typeface.DEFAULT
+            letterSpacing = 0.02f
         }
     }
 
@@ -140,8 +184,16 @@ fun SkyOverlay(
         drawReticle(center)
         hitTargets.clear()
 
+        // Find the single closest on-screen plane to the crosshair this frame.
+        var newNearHex: String? = null
+        var newNearDist = CROSSHAIR_RADIUS_PX
+
+        // The crosshair-focused plane is drawn after the loop so its enlarged tag
+        // sits on top of every other plane instead of being overdrawn by later ones.
+        var focused: DeferredFocus? = null
+
         var hintsDrawn = 0
-        planes.take(60).forEach { tracked ->
+        visible.forEachIndexed { i, tracked ->
             val proj = SkyMath.project(
                 planeAzimuthDeg = tracked.sky.azimuthDeg,
                 planeElevationDeg = tracked.sky.elevationDeg,
@@ -155,10 +207,6 @@ fun SkyOverlay(
             if (proj.onScreen) {
                 val pos = Offset(proj.x, proj.y)
                 val color = Color(PlaneSize.classify(tracked.aircraft.category).colorArgb)
-
-                if (tracked.aircraft.hex == selectedHex) {
-                    drawCircle(selectionRing, radius = 42f, center = pos, style = Stroke(3f))
-                }
 
                 val ahead = tracked.skyAhead
                 val screenRot = ahead?.let {
@@ -177,30 +225,43 @@ fun SkyOverlay(
                         Math.toDegrees(atan2(dx.toDouble(), -dy.toDouble())).toFloat()
                     } else null
                 }
-                if (screenRot != null) {
-                    drawPlaneIcon(pos, screenRot, color, stroke = planeStroke)
-                } else {
-                    drawCircle(color, radius = 16f, center = pos)
+
+                // Track closest plane to crosshair (single winner only).
+                val d = (pos - center).getDistance()
+                if (d < newNearDist) {
+                    newNearDist = d
+                    newNearHex = tracked.aircraft.hex
                 }
 
-                val flag = tracked.country?.flag?.let { "$it " } ?: ""
-                val title = "$flag${tracked.aircraft.callsign}"
-                val sub = Formatters.altitude(tracked.aircraft.altitudeMeters, prefs.altitudeUnit) +
-                    "  " + Formatters.speed(tracked.aircraft.groundSpeedKnots, prefs.speedUnit)
-                val dist = formatDistKm(tracked.sky.slantDistanceMeters)
-                val tag = drawTag(pos, title, sub, dist, color, tagBg, titlePaint, subPaint, distPaint)
-                hitTargets.add(
-                    PlaneHit(
-                        hex = tracked.aircraft.hex,
-                        iconPos = pos,
-                        iconRadius = 40f,
-                        tag = tag,
+                val selected = tracked.aircraft.hex == selectedHex
+                if (tracked.aircraft.hex == nearHexState.value) {
+                    focused = DeferredFocus(tracked.aircraft.hex, pos, color, screenRot, selected, labels[i])
+                } else {
+                    drawPlaneEntry(
+                        tracked.aircraft.hex, pos, color, screenRot, selected,
+                        selectionRing, planeStroke, labels[i], 1f,
+                        tagBg, tagBorder, titlePaint, subPaint, hitTargets,
                     )
-                )
+                }
             } else if (hintsDrawn < 6) {
                 drawOffScreenHint(center, proj.bearingFromCenterDeg, min(w, h), hintColor)
                 hintsDrawn++
             }
+        }
+
+        // Top layer: the enlarged, focused plane and its tag.
+        focused?.let { f ->
+            drawPlaneEntry(
+                f.hex, f.pos, f.color, f.screenRot, f.selected,
+                selectionRing, planeStroke, f.label, tagScale.value,
+                tagBg, tagBorder, titlePaint, subPaint, hitTargets,
+                addFirst = true,
+            )
+        }
+
+        // Trigger animation only when the near-hex actually changes.
+        if (nearHexState.value != newNearHex) {
+            nearHexState.value = newNearHex
         }
     }
 }
@@ -212,6 +273,34 @@ private fun DrawScope.drawReticle(center: Offset) {
     drawLine(Color.White.copy(alpha = 0.25f), Offset(center.x + r, center.y), Offset(center.x + r + 14f, center.y), 1.5f)
 }
 
+
+/** Draws one plane (selection ring + icon + tag) and registers its hit target.
+ *  [addFirst] puts the hit target ahead of the rest so taps match the top-most
+ *  (focused) tag, mirroring the deferred-draw layering. */
+private fun DrawScope.drawPlaneEntry(
+    hex: String,
+    pos: Offset,
+    color: Color,
+    screenRot: Float?,
+    selected: Boolean,
+    selectionRing: Color,
+    planeStroke: Color,
+    label: PlaneLabel,
+    scale: Float,
+    tagBg: Color,
+    tagBorder: Color,
+    titlePaint: Paint,
+    subPaint: Paint,
+    hitTargets: MutableList<PlaneHit>,
+    addFirst: Boolean = false,
+) {
+    if (selected) drawCircle(selectionRing, radius = 42f, center = pos, style = Stroke(3f))
+    if (screenRot != null) drawPlaneIcon(pos, screenRot, color, stroke = planeStroke)
+    else drawCircle(color, radius = 16f, center = pos)
+    val tag = drawTag(pos, label.title, label.line1, label.line2, color, tagBg, tagBorder, titlePaint, subPaint, scale)
+    val hit = PlaneHit(hex = hex, iconPos = pos, iconRadius = 40f, tag = tag)
+    if (addFirst) hitTargets.add(0, hit) else hitTargets.add(hit)
+}
 
 // ponytail: PLANE_PATH is a module-level val; translate+rotate avoids per-frame Path allocs.
 // pivot = Offset.Zero rotates around the translated origin (= pos on screen).
@@ -227,46 +316,93 @@ private fun DrawScope.drawPlaneIcon(pos: Offset, rotationDeg: Float, color: Colo
 private fun DrawScope.drawTag(
     iconPos: Offset,
     title: String,
-    sub: String,
-    dist: String,
+    line1: String,
+    line2: String,
     accent: Color,
     background: Color,
+    border: Color,
     titlePaint: Paint,
-    subPaint: Paint,
-    distPaint: Paint,
+    infoPaint: Paint,
+    scale: Float = 1f,
 ): TagRect {
-    val padX = 14f
-    val padY = 10f
-    val gap = 5f
+    // Scale paint text sizes for this draw call only, then restore.
+    val baseTitleSize = titlePaint.textSize
+    val baseInfoSize = infoPaint.textSize
+    if (scale != 1f) {
+        titlePaint.textSize = baseTitleSize * scale
+        infoPaint.textSize = baseInfoSize * scale
+    }
+
+    val padX = 14f * scale
+    val padY = 10f * scale
+    val lineGap = 3f * scale
+    val stripeW = 4f * scale
+    val stripeGap = 11f * scale
+    val leader = 11f * scale  // short connector from icon to the tag
+
     val titleH = titlePaint.textSize
-    val subH = subPaint.textSize
-    val distH = distPaint.textSize
-    val textW = maxOf(titlePaint.measureText(title), subPaint.measureText(sub), distPaint.measureText(dist))
-    val boxW = textW + padX * 2
-    val boxH = titleH + subH + distH + gap * 2 + padY * 2
+    val infoH = infoPaint.textSize
 
-    val left = iconPos.x + 24f
+    val contentLeftPad = padX + stripeW + stripeGap
+    val textW = max(
+        titlePaint.measureText(title),
+        max(infoPaint.measureText(line1), infoPaint.measureText(line2)),
+    )
+    val boxW = contentLeftPad + textW + padX
+    val boxH = titleH + infoH * 2 + lineGap * 2 + padY * 2
+
+    val left = iconPos.x + 16f + leader
     val top = iconPos.y - boxH / 2f
+    val cr = CornerRadius(13f * scale, 13f * scale)
 
+    // Leader: a short hairline linking the icon to the tag so the pairing is clear.
+    drawLine(
+        color = border,
+        start = Offset(iconPos.x + 16f, iconPos.y),
+        end = Offset(left, iconPos.y),
+        strokeWidth = 1.5f,
+    )
+
+    // Background + hairline border (border brightens slightly when enlarged).
     drawRoundRect(
         color = background,
         topLeft = Offset(left, top),
         size = Size(boxW, boxH),
-        cornerRadius = CornerRadius(16f, 16f),
+        cornerRadius = cr,
+    )
+    drawRoundRect(
+        color = if (scale > 1f) border.copy(alpha = 0.32f) else border,
+        topLeft = Offset(left, top),
+        size = Size(boxW, boxH),
+        cornerRadius = cr,
+        style = Stroke(1.5f),
     )
 
-    drawLine(
-        accent.copy(alpha = 0.85f),
-        Offset(left, top + 4f),
-        Offset(left, top + boxH - 4f),
-        3f,
+    // Category accent stripe at the left inside edge (replaces the old dot + divider).
+    val stripeX = left + padX
+    val stripeTop = top + padY
+    val stripeH = boxH - padY * 2
+    drawRoundRect(
+        color = accent,
+        topLeft = Offset(stripeX, stripeTop),
+        size = Size(stripeW, stripeH),
+        cornerRadius = CornerRadius(stripeW / 2f, stripeW / 2f),
     )
 
+    // Text: callsign on top, then distance and altitude · speed.
     drawContext.canvas.nativeCanvas.let { canvas ->
-        val textX = left + padX
-        canvas.drawText(title, textX, top + padY + titleH - 4f, titlePaint)
-        canvas.drawText(sub, textX, top + padY + titleH + gap + subH - 2f, subPaint)
-        canvas.drawText(dist, textX, top + padY + titleH + gap + subH + gap + distH - 2f, distPaint)
+        val textX = left + contentLeftPad
+        val titleBase = top + padY + titleH - 2f * scale
+        canvas.drawText(title, textX, titleBase, titlePaint)
+        val line1Base = titleBase + lineGap + infoH
+        canvas.drawText(line1, textX, line1Base, infoPaint)
+        canvas.drawText(line2, textX, line1Base + lineGap + infoH, infoPaint)
+    }
+
+    // Restore paint sizes
+    if (scale != 1f) {
+        titlePaint.textSize = baseTitleSize
+        infoPaint.textSize = baseInfoSize
     }
 
     return TagRect(left, top, left + boxW, top + boxH)

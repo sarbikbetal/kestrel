@@ -11,6 +11,13 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlin.math.atan2
 import kotlin.math.hypot
 
+/** Shortest signed difference, normalized to [-180, 180]. */
+private fun wrap180(deg: Double): Double {
+    var d = (deg + 180.0) % 360.0
+    if (d < 0.0) d += 360.0
+    return d - 180.0
+}
+
 /**
  * Where the back camera is pointing, in world terms.
  *  - [azimuthDeg]        heading from TYPE_GAME_ROTATION_VECTOR (accel+gyro only).
@@ -18,8 +25,10 @@ import kotlin.math.hypot
  *                        Not compass-calibrated; use [compassBearingDeg] for true north.
  *  - [elevationDeg]      angle above the horizon (0 = level, 90 = straight up)
  *  - [rollDeg]           rotation about the viewing axis, used to keep overlays upright
- *  - [compassBearingDeg] true compass bearing from TYPE_ROTATION_VECTOR (magnetometer-fused).
- *                        Use this for heading display; do NOT use for rendering.
+ *  - [compassBearingDeg] true-north heading for both rendering and display: the smooth
+ *                        50 Hz game azimuth re-anchored to north via a slowly-tracked
+ *                        compass offset (complementary filter). North-locked like the
+ *                        raw magnetometer, but updates at the game-sensor rate.
  *  - [compassAccuracy]   SensorManager accuracy constant (3=high, 2=medium, 1=low,
  *                        0=unreliable, -1=not yet received).
  */
@@ -58,29 +67,42 @@ class OrientationProvider(context: Context) {
         // (the old alpha = 0.15) adds a ~110 ms first-order lag at SENSOR_DELAY_GAME,
         // which is the "overlay drags behind the phone" feel. Keep it responsive.
         val gameAlpha = 0.8f
-        val compassAlpha = 0.4f // display-only bearing; magnetometer noise needs a touch more
+        val compassAlpha = 0.4f // magnetometer noise needs a touch more smoothing
+        // How fast the true-north offset tracks the compass. Deliberately slow: the
+        // game-azimuth gyro drift it corrects is gradual, and a small value keeps a
+        // fast pan riding the smooth 50 Hz game azimuth instead of the ~16 Hz compass.
+        val offsetAlpha = 0.05
 
         // --- Game sensor state (stable azimuth / elevation / roll) ---
         val gameRot = FloatArray(9)
         var gse = 0f; var gsn = 0f; var gsu = 0f; var gsrx = 0f; var gsry = 0f
         var gameSeeded = false
 
-        // --- Compass sensor state (true bearing, display only) ---
+        // --- Compass sensor state (true-north reference) ---
         val compassRot = FloatArray(9)
         var cse = 0f; var csn = 0f
         var compassSeeded = false
         var lastAccuracy = -1
 
+        // --- Fused-heading state ---
+        // Render heading = smooth game azimuth + headingOffset, where headingOffset
+        // (= trueNorth − gameZero) is tracked slowly from the compass. This gives a
+        // 50 Hz, north-locked bearing so horizontal panning is as smooth as tilt.
+        var gameAzimuthDeg = 0.0
+        var headingOffset = 0.0
+        var offsetSeeded = false
+
         fun buildAndSend() {
             if (!gameSeeded) return
             val horiz = hypot(gse.toDouble(), gsn.toDouble())
-            val azimuth   = ((Math.toDegrees(atan2(gse.toDouble(), gsn.toDouble())) + 360.0) % 360.0).toFloat()
+            val azimuth   = (Math.toDegrees(atan2(gse.toDouble(), gsn.toDouble())) + 360.0) % 360.0
+            gameAzimuthDeg = azimuth
             val elevation = Math.toDegrees(atan2(gsu.toDouble(), horiz)).toFloat()
             val roll      = Math.toDegrees(atan2(gsrx.toDouble(), gsry.toDouble())).toFloat()
-            val bearing   = if (compassSeeded)
-                ((Math.toDegrees(atan2(cse.toDouble(), csn.toDouble())) + 360.0) % 360.0).toFloat()
+            val bearing   = if (offsetSeeded)
+                ((azimuth + headingOffset) % 360.0 + 360.0) % 360.0
             else azimuth
-            trySend(DeviceOrientation(azimuth, elevation, roll, bearing, lastAccuracy))
+            trySend(DeviceOrientation(azimuth.toFloat(), elevation, roll, bearing.toFloat(), lastAccuracy))
         }
 
         val gameListener = object : SensorEventListener {
@@ -111,6 +133,16 @@ class OrientationProvider(context: Context) {
                 } else {
                     cse += compassAlpha * (east  - cse)
                     csn += compassAlpha * (north - csn)
+                }
+                // Re-anchor the render heading to true north. Seed exactly on the first
+                // fix; afterwards drift toward it slowly so pans stay smooth.
+                val compassBearing = (Math.toDegrees(atan2(cse.toDouble(), csn.toDouble())) + 360.0) % 360.0
+                val diff = wrap180(compassBearing - gameAzimuthDeg)
+                headingOffset = if (!offsetSeeded) {
+                    offsetSeeded = true
+                    diff
+                } else {
+                    wrap180(headingOffset + offsetAlpha * wrap180(diff - headingOffset))
                 }
             }
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {

@@ -50,62 +50,61 @@ fun AppNav(
     // Held as State (not read here) so the high-frequency orientation only invalidates
     // the AR canvas's draw phase, never recomposes this whole nav tree.
     val orientation = viewModel.orientation.collectAsStateWithLifecycle()
-    val showBottomBar = state.selectedHex == null
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            if (showBottomBar) {
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                ) {
-                    val navBackStackEntry by nav.currentBackStackEntryAsState()
-                    val currentDestination = navBackStackEntry?.destination
+            // Always present; the plane-detail ModalBottomSheet draws above it (with
+            // its scrim) when a plane is selected, so the bar stays put behind the sheet.
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            ) {
+                val navBackStackEntry by nav.currentBackStackEntryAsState()
+                val currentDestination = navBackStackEntry?.destination
 
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Filled.CameraAlt, contentDescription = "AR Sky") },
-                        label = { Text("AR Sky") },
-                        selected = currentDestination?.hierarchy?.any { it.route == Routes.SKY } == true,
-                        onClick = {
-                            nav.navigate(Routes.SKY) {
-                                popUpTo(nav.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
+                NavigationBarItem(
+                    icon = { Icon(Icons.Filled.CameraAlt, contentDescription = "AR Sky") },
+                    label = { Text("AR Sky") },
+                    selected = currentDestination?.hierarchy?.any { it.route == Routes.SKY } == true,
+                    onClick = {
+                        nav.navigate(Routes.SKY) {
+                            popUpTo(nav.graph.findStartDestination().id) {
+                                saveState = true
                             }
-                        },
-                    )
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Filled.Map, contentDescription = "Map") },
-                        label = { Text("Map") },
-                        selected = currentDestination?.hierarchy?.any { it.route == Routes.MAP } == true,
-                        onClick = {
-                            nav.navigate(Routes.MAP) {
-                                popUpTo(nav.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Filled.Map, contentDescription = "Map") },
+                    label = { Text("Map") },
+                    selected = currentDestination?.hierarchy?.any { it.route == Routes.MAP } == true,
+                    onClick = {
+                        nav.navigate(Routes.MAP) {
+                            popUpTo(nav.graph.findStartDestination().id) {
+                                saveState = true
                             }
-                        },
-                    )
-                    NavigationBarItem(
-                        icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings") },
-                        label = { Text("Settings") },
-                        selected = currentDestination?.hierarchy?.any { it.route == Routes.SETTINGS } == true,
-                        onClick = {
-                            nav.navigate(Routes.SETTINGS) {
-                                popUpTo(nav.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings") },
+                    label = { Text("Settings") },
+                    selected = currentDestination?.hierarchy?.any { it.route == Routes.SETTINGS } == true,
+                    onClick = {
+                        nav.navigate(Routes.SETTINGS) {
+                            popUpTo(nav.graph.findStartDestination().id) {
+                                saveState = true
                             }
-                        },
-                    )
-                }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
             }
         },
     ) { innerPadding ->

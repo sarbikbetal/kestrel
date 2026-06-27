@@ -101,8 +101,10 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
     private val _location = MutableStateFlow<UserLocation?>(null)
     val location: StateFlow<UserLocation?> = _location.asStateFlow()
 
-    /** True once a live hardware GPS fix has been received in this session. */
-    private val _locationIsLive = MutableStateFlow(false)
+    /** Whether device location services are switched on. Seeded from the system,
+     *  re-checked on resume, and set true whenever a live fix arrives. Drives the
+     *  "enable location" nudge so it only appears when location is actually off. */
+    private val _locationServicesEnabled = MutableStateFlow(locationProvider.isLocationEnabled())
 
     private val _orientation = MutableStateFlow(DeviceOrientation(0f, 0f, 0f))
 
@@ -202,8 +204,8 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
 
     // Bundles the less-frequent signals so the main combine stays within 5 flows.
     private val misc: Flow<Misc> =
-        combine(_error, _pollStatus, _trace, _route, _locationIsLive) { err, poll, trace, route, live ->
-            Misc(error = err, poll = poll, trace = trace, route = route, locationIsLive = live)
+        combine(_error, _pollStatus, _trace, _route, _locationServicesEnabled) { err, poll, trace, route, enabled ->
+            Misc(error = err, poll = poll, trace = trace, route = route, locationServicesEnabled = enabled)
         }
 
     val uiState: StateFlow<SkyUiState> =
@@ -216,7 +218,7 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
         ) { loc, orient, planes, m, prefs ->
             SkyUiState(
                 location = loc,
-                locationIsStale = loc != null && !m.locationIsLive,
+                locationIsStale = loc != null && !m.locationServicesEnabled,
                 orientation = orient,
                 planes = planes,
                 sensorAvailable = orientationProvider.isAvailable,
@@ -240,7 +242,8 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
             val cached = settingsRepository.loadLastLocation()
             if (cached != null && _location.value == null) {
                 _location.value = cached
-                // _locationIsLive stays false → UI shows the stale nudge
+                // If services are off the nudge shows; if on, we silently use the
+                // cached fix until the first live update arrives.
             }
         }
 
@@ -339,6 +342,12 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
         return Triple(lat, lon, predAlt)
     }
 
+    /** Re-check whether location services are on (e.g. after the user returns from
+     *  the system location settings) so the "enable location" nudge stays accurate. */
+    fun refreshLocationServices() {
+        _locationServicesEnabled.value = locationProvider.isLocationEnabled()
+    }
+
     /** Begin location updates; call only after ACCESS_FINE_LOCATION is granted. */
     fun startLocationUpdates() {
         if (locationJob != null) return
@@ -346,7 +355,8 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 locationProvider.stream().collect { loc ->
                     _location.value = loc
-                    _locationIsLive.value = true
+                    // A live fix proves services are on; clear any stale nudge.
+                    _locationServicesEnabled.value = true
                     // Persist so the next cold start has a starting point.
                     settingsRepository.saveLastLocation(loc)
                 }
@@ -380,7 +390,7 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
         val poll: PollStatus,
         val trace: TraceState,
         val route: RouteState,
-        val locationIsLive: Boolean,
+        val locationServicesEnabled: Boolean,
     )
 
     companion object {

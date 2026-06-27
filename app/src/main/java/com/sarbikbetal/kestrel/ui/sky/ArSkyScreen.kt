@@ -307,6 +307,9 @@ private fun HudCompass(
         textSize = 30f; textAlign = Paint.Align.RIGHT; typeface = Typeface.DEFAULT_BOLD
     }}
 
+    // Reused across the ~50 Hz redraw: rewind() keeps the buffer, no per-frame Path alloc.
+    val bgPath = remember { Path() }
+
     Column(modifier = modifier) {
         // Single canvas: background shape + compass tape + info text.
         Canvas(modifier = Modifier.fillMaxWidth().height(92.dp)) {
@@ -325,7 +328,8 @@ private fun HudCompass(
             // The cutout widens slightly toward the bottom (trapezoidal notch).
             val scoopTopHW = w * 0.20f   // half-width at the tape/info boundary
             val scoopBotHW = w * 0.32f   // half-width at the bottom edge
-            val bgPath = Path().apply {
+            bgPath.rewind()
+            bgPath.apply {
                 moveTo(0f, 0f);               lineTo(w, 0f)
                 lineTo(w, h);                 lineTo(cx + scoopBotHW, h)
                 lineTo(cx + scoopTopHW, tapeH)
@@ -409,6 +413,10 @@ private fun SyntheticSky(
     // Astro Red: dim deep-crimson pinpoints. Normal: white star points.
     val starTint     = if (astroRed) Color(0xFFCC1100) else Color.White
 
+    // Reused across the ~50 Hz redraw: rewind() keeps the buffer, no per-frame Path alloc.
+    val skyPath = remember { Path() }
+    val groundPath = remember { Path() }
+
     Canvas(modifier = modifier) {
         // Read orientation in the draw phase: phone motion repaints the sky without
         // recomposing this composable.
@@ -430,14 +438,16 @@ private fun SyntheticSky(
         val rightHorizonY = horizonY + (w - cx) * tanR
 
         // Sky polygon: above the tilted horizon line.
-        val skyPath = Path().apply {
+        skyPath.rewind()
+        skyPath.apply {
             moveTo(0f, 0f);         lineTo(w, 0f)
             lineTo(w, rightHorizonY); lineTo(0f, leftHorizonY)
             close()
         }
 
         // Ground polygon: below the tilted horizon line.
-        val groundPath = Path().apply {
+        groundPath.rewind()
+        groundPath.apply {
             moveTo(0f, leftHorizonY); lineTo(w, rightHorizonY)
             lineTo(w, h);             lineTo(0f, h)
             close()

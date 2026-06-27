@@ -13,6 +13,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sarbikbetal.kestrel.settings.AppTheme
@@ -59,6 +61,12 @@ private fun PlaneSpotterApp() {
 
     LaunchedEffect(locationPerm.status.isGranted) {
         if (locationPerm.status.isGranted) viewModel.startLocationUpdates()
+    }
+
+    // Re-check location-services state each time the app returns to the foreground
+    // (e.g. after the user toggles it from the GPS-off shortcut).
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.refreshLocationServices()
     }
 
     KestrelTheme(appTheme = prefs.appTheme) {
