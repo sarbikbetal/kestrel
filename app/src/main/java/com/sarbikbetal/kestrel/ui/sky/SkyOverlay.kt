@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -243,9 +244,26 @@ fun SkyOverlay(
                         tagBg, tagBorder, titlePaint, subPaint, hitTargets,
                     )
                 }
-            } else if (hintsDrawn < 6) {
-                drawOffScreenHint(center, proj.bearingFromCenterDeg, min(w, h), hintColor)
-                hintsDrawn++
+            } else {
+                val isSelected = tracked.aircraft.hex == selectedHex
+                // Selected plane always gets a hint regardless of the cap.
+                if (isSelected) {
+                    drawOffScreenHint(
+                        center = center,
+                        bearingDeg = proj.bearingFromCenterDeg,
+                        span = min(w, h),
+                        color = selectionRing,
+                        scale = 1.7f,
+                    )
+                } else if (hintsDrawn < 6) {
+                    drawOffScreenHint(
+                        center = center,
+                        bearingDeg = proj.bearingFromCenterDeg,
+                        span = min(w, h),
+                        color = hintColor,
+                    )
+                    hintsDrawn++
+                }
             }
         }
 
@@ -408,12 +426,20 @@ private fun DrawScope.drawTag(
     return TagRect(left, top, left + boxW, top + boxH)
 }
 
-// ponytail: HINT_ARROW_PATH is a module-level val; translate avoids per-frame Path+Offset allocs.
-private fun DrawScope.drawOffScreenHint(center: Offset, bearingDeg: Float, span: Float, color: Color) {
+// ponytail: HINT_ARROW_PATH is a module-level val; translate+scale avoids per-frame Path+Offset allocs.
+private fun DrawScope.drawOffScreenHint(
+    center: Offset,
+    bearingDeg: Float,
+    span: Float,
+    color: Color,
+    scale: Float = 1f,
+) {
     val radius = span * 0.42f
     rotate(degrees = bearingDeg, pivot = center) {
         translate(left = center.x, top = center.y - radius) {
-            drawPath(HINT_ARROW_PATH, color.copy(alpha = 0.9f))
+            scale(scale = scale, pivot = Offset(0f, 13f)) {
+                drawPath(HINT_ARROW_PATH, color.copy(alpha = 0.9f))
+            }
         }
     }
 }

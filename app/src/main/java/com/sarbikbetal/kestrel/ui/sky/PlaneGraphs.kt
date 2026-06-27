@@ -108,6 +108,7 @@ fun PlaneDetailContent(
     error: String?,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    showCloseButton: Boolean = true,
 ) {
     val callsign = selected?.aircraft?.callsign ?: fallbackTitle
     val airline = details?.airlineName
@@ -132,8 +133,10 @@ fun PlaneDetailContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            FilledTonalIconButton(onClick = onClose) {
-                Icon(Icons.Filled.Close, contentDescription = "Close")
+            if (showCloseButton) {
+                FilledTonalIconButton(onClick = onClose) {
+                    Icon(Icons.Filled.Close, contentDescription = "Close")
+                }
             }
         }
 

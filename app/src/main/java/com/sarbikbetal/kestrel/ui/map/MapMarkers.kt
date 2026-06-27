@@ -16,6 +16,41 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import kotlin.math.roundToInt
 
+/**
+ * A non-rotating hollow ring drawn under the selected aircraft as a selection
+ * halo. Hollow so the plane icon stays visible through the centre.
+ */
+fun selectionMarker(map: MapView, colorArgb: Int): Marker =
+    Marker(map).apply {
+        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+        icon = selectionRingIcon(map.context, colorArgb)
+        isFlat = true
+        setInfoWindow(null)
+        setOnMarkerClickListener { _, _ -> false }
+    }
+
+private fun selectionRingIcon(context: Context, colorArgb: Int): BitmapDrawable {
+    val density = context.resources.displayMetrics.density
+    val sizePx = (56f * density).roundToInt()
+    val stroke = 3f * density
+    val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val c = sizePx / 2f
+    val radius = c - stroke
+    val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        style = android.graphics.Paint.Style.FILL
+        color = (colorArgb and 0x00FFFFFF) or 0x22000000 // ~13% alpha tint
+    }
+    val ring = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = stroke
+        color = colorArgb
+    }
+    canvas.drawCircle(c, c, radius, fill)
+    canvas.drawCircle(c, c, radius, ring)
+    return BitmapDrawable(context.resources, bitmap)
+}
+
 fun userMarker(map: MapView, point: GeoPoint): Marker =
     Marker(map).apply {
         position = point

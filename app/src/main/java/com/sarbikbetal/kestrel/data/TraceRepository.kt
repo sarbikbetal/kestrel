@@ -47,6 +47,8 @@ class TraceRepository(
         return trace.mapNotNull { row ->
             val a = row as? JsonArray ?: return@mapNotNull null
             val dt = a.getOrNull(0)?.jsonPrimitive?.doubleOrNull ?: return@mapNotNull null
+            val lat = a.getOrNull(1)?.jsonPrimitive?.doubleOrNull
+            val lon = a.getOrNull(2)?.jsonPrimitive?.doubleOrNull
             val altEl = a.getOrNull(3)
             val altFeet = when {
                 altEl is JsonPrimitive && altEl.isString -> 0.0 // "ground"
@@ -57,6 +59,8 @@ class TraceRepository(
                 timeMs = ((base + dt) * 1000).toLong(),
                 speedKnots = gs,
                 altitudeMeters = altFeet?.let { it * FEET_TO_METERS },
+                lat = lat,
+                lon = lon,
             )
         }
     }

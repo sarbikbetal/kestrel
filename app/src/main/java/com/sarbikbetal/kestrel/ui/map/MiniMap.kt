@@ -53,6 +53,7 @@ fun MiniMap(
         MapView(context).apply {
             setTileSource(TileSourceFactory.MAPNIK)
             setMultiTouchControls(false)
+            zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER)
             controller.setZoom(8.0)
             isHorizontalMapRepetitionEnabled = false
             isVerticalMapRepetitionEnabled = false

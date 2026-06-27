@@ -155,6 +155,12 @@ fun AppNav(
                     onSetMapType = settingsViewModel::setMapType,
                     onToggleAircraft = settingsViewModel::setShowAircraft,
                     onToggleHeadingCone = settingsViewModel::setShowHeadingCone,
+                    selectedHex = state.selectedHex,
+                    details = state.details,
+                    detailsLoading = state.detailsLoading,
+                    history = state.history,
+                    historyLoading = state.historyLoading,
+                    historyError = state.historyError,
                 )
             }
             composable(Routes.SETTINGS) {
@@ -172,19 +178,23 @@ fun AppNav(
             }
         }
 
-        state.selectedHex?.let { hex ->
-            val selected = state.planes.firstOrNull { it.aircraft.hex == hex }
-            PlaneDetailBottomSheet(
-                selected = selected,
-                fallbackTitle = hex,
-                details = state.details,
-                detailsLoading = state.detailsLoading,
-                samples = state.history,
-                prefs = state.prefs,
-                loading = state.historyLoading,
-                error = state.historyError,
-                onDismiss = { viewModel.selectPlane(null) },
-            )
+        // AR Sky only: full modal bottom sheet. Map uses its own push-up drawer.
+        val navBackStackEntry by nav.currentBackStackEntryAsState()
+        if (navBackStackEntry?.destination?.route == Routes.SKY) {
+            state.selectedHex?.let { hex ->
+                val selected = state.planes.firstOrNull { it.aircraft.hex == hex }
+                PlaneDetailBottomSheet(
+                    selected = selected,
+                    fallbackTitle = hex,
+                    details = state.details,
+                    detailsLoading = state.detailsLoading,
+                    samples = state.history,
+                    prefs = state.prefs,
+                    loading = state.historyLoading,
+                    error = state.historyError,
+                    onDismiss = { viewModel.selectPlane(null) },
+                )
+            }
         }
     }
 }
