@@ -1,5 +1,7 @@
 package com.sarbikbetal.kestrel.ui.settings
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -33,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sarbikbetal.kestrel.settings.AltitudeUnit
@@ -42,6 +45,8 @@ import com.sarbikbetal.kestrel.settings.RouteSource
 import com.sarbikbetal.kestrel.settings.SpeedUnit
 import com.sarbikbetal.kestrel.settings.TimeFormat
 import com.sarbikbetal.kestrel.settings.UserPrefs
+
+private const val GITHUB_URL = "https://github.com/sarbikbetal/kestrel"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -145,6 +150,10 @@ fun SettingsScreen(
             // ── Sensors ───────────────────────────────────────────────────
             SectionHeader("Sensors")
             CompassGroup(compassAccuracy = compassAccuracy)
+
+            // ── About ─────────────────────────────────────────────────────
+            SectionHeader("About")
+            AboutGroup()
 
             Spacer(Modifier.padding(bottom = 16.dp))
         }
@@ -301,4 +310,69 @@ private fun accuracyLabelAndColor(accuracy: Int): Pair<String, Color> = when (ac
     1    -> "Low"         to MaterialTheme.colorScheme.error
     0    -> "Unreliable"  to MaterialTheme.colorScheme.error
     else -> "Waiting…"    to MaterialTheme.colorScheme.onSurfaceVariant
+}
+
+// ── About ─────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun AboutGroup(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val version = remember {
+        runCatching {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        }.getOrNull().orEmpty().ifEmpty { "—" }
+    }
+    val openUrl: (String) -> Unit = { url ->
+        runCatching {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }
+    }
+
+    SettingsGroup(modifier = modifier) {
+        ListItem(
+            headlineContent = { Text("Version") },
+            supportingContent = { Text(version) },
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        )
+        GroupDivider()
+        ListItem(
+            headlineContent = { Text("Source code") },
+            supportingContent = {
+                Text(
+                    "github.com/sarbikbetal/kestrel",
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            },
+            modifier = Modifier.clickable { openUrl(GITHUB_URL) },
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        )
+        GroupDivider()
+        CreditLink("adsb.lol", "Aircraft positions & traces", "https://adsb.lol", openUrl)
+        GroupDivider()
+        CreditLink("airplanes.live", "Aircraft positions", "https://airplanes.live", openUrl)
+        GroupDivider()
+        CreditLink("hexdb.io", "Route data", "https://hexdb.io", openUrl)
+        GroupDivider()
+        CreditLink("adsbdb.com", "Route data", "https://www.adsbdb.com", openUrl)
+        GroupDivider()
+        CreditLink("OpenStreetMap", "Map tiles", "https://www.openstreetmap.org/copyright", openUrl)
+    }
+}
+
+@Composable
+private fun CreditLink(
+    label: String,
+    role: String,
+    url: String,
+    openUrl: (String) -> Unit,
+) {
+    ListItem(
+        headlineContent = { Text(label) },
+        supportingContent = {
+            Text(role, color = MaterialTheme.colorScheme.primary)
+        },
+        modifier = Modifier.clickable { openUrl(url) },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+    )
 }

@@ -38,7 +38,9 @@ jobs:
           version="${latest#v}"
           IFS='.' read -r major minor patch <<< "$version"
           new_tag="v${major}.${minor}.$((patch + 1))"
+          new_version="${new_tag#v}"
           echo "tag=${new_tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${new_version}" >> "$GITHUB_OUTPUT"
           echo "Next release: ${new_tag}"
 
       # ── Android SDK ─────────────────────────────────────────────────────────
@@ -70,8 +72,7 @@ jobs:
 
       # ── Build ────────────────────────────────────────────────────────────────
       - name: Build release APK
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
-
+        run: ./gradlew assembleRelease --no-daemon --stacktrace -PVERSION_NAME=${{ steps.semver.outputs.version }}
       # ── Package ──────────────────────────────────────────────────────────────
       - name: Rename APK
         run: |
