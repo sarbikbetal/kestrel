@@ -42,8 +42,8 @@ android {
         targetSdk = 37
         // Literals on purpose: F-Droid's update checker regex-parses these.
         // The release workflow rewrites them (code = major*1e6 + minor*1e3 + patch).
-        versionName = "0.3.0"
-        versionCode = 3000
+        versionName = "0.4.0"
+        versionCode = 4000
     }
 
     androidResources {
