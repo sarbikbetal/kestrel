@@ -40,10 +40,10 @@ android {
         applicationId = "com.sarbikbetal.kestrel"
         minSdk = 26
         targetSdk = 37
-        // CI passes -PVERSION_NAME=<tag without v>; local builds use the latest git tag.
-        val name = resolveVersionName()
-        versionName = name
-        versionCode = versionCodeFrom(name)
+        // Literals on purpose: F-Droid's update checker regex-parses these.
+        // The release workflow rewrites them (code = major*1e6 + minor*1e3 + patch).
+        versionName = "0.3.0"
+        versionCode = 3000
     }
 
     androidResources {
@@ -108,32 +108,4 @@ dependencies {
     implementation(libs.osmdroid.android)
     implementation(libs.accompanist.permissions)
     implementation(libs.androidx.datastore.preferences)
-}
-
-/** Prefer -PVERSION_NAME (release workflow), else latest `v*` git tag, else 0.0.0. */
-fun Project.resolveVersionName(): String {
-    (findProperty("VERSION_NAME") as String?)
-        ?.trim()
-        ?.removePrefix("v")
-        ?.takeIf { it.isNotEmpty() }
-        ?.let { return it }
-
-    return runCatching {
-        ProcessBuilder("git", "describe", "--tags", "--match", "v*", "--abbrev=0")
-            .directory(rootProject.projectDir)
-            .redirectError(ProcessBuilder.Redirect.DISCARD)
-            .start()
-            .inputStream.bufferedReader().readText().trim()
-            .removePrefix("v")
-            .takeIf { it.isNotEmpty() }
-    }.getOrNull() ?: "0.0.0"
-}
-
-/** Monotonic Play-store-safe code from semver: major*1e6 + minor*1e3 + patch. */
-fun versionCodeFrom(versionName: String): Int {
-    val parts = versionName.substringBefore('-').split('.')
-    val major = parts.getOrNull(0)?.toIntOrNull() ?: 0
-    val minor = parts.getOrNull(1)?.toIntOrNull() ?: 0
-    val patch = parts.getOrNull(2)?.toIntOrNull() ?: 0
-    return major * 1_000_000 + minor * 1_000 + patch
 }

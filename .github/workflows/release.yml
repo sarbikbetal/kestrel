@@ -40,8 +40,24 @@ jobs:
           new_tag="v${major}.$((minor + 1)).0"
           new_version="${new_tag#v}"
           echo "tag=${new_tag}" >> "$GITHUB_OUTPUT"
+          echo "code=$((major * 1000000 + (minor + 1) * 1000))" >> "$GITHUB_OUTPUT"
           echo "version=${new_version}" >> "$GITHUB_OUTPUT"
           echo "Next release: ${new_tag}"
+
+      # Commit literal versionName/versionCode so the tag's source carries them
+      # (F-Droid's update checker reads them statically). GITHUB_TOKEN pushes don't retrigger CI.
+      - name: Bump version in build.gradle.kts
+        id: bump
+        run: |
+          sed -i -E \
+            -e 's/versionName = "[^"]*"/versionName = "${{ steps.semver.outputs.version }}"/' \
+            -e 's/versionCode = [0-9]+/versionCode = ${{ steps.semver.outputs.code }}/' \
+            app/build.gradle.kts
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Release ${{ steps.semver.outputs.tag }}"
+          git push origin HEAD:main
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # ── Android SDK ─────────────────────────────────────────────────────────
       # Use the same cmdline-tools zip as the Dockerfile so SDK 37 is available.
@@ -72,7 +88,7 @@ jobs:
 
       # ── Build ────────────────────────────────────────────────────────────────
       - name: Build release APK
-        run: ./gradlew assembleRelease --no-daemon --stacktrace -PVERSION_NAME=${{ steps.semver.outputs.version }}
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
       # ── Package ──────────────────────────────────────────────────────────────
       - name: Rename APK and measure size
         id: apk
@@ -92,6 +108,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.semver.outputs.tag }}
+          target_commitish: ${{ steps.bump.outputs.sha }}
           name: "Kestrel ${{ steps.semver.outputs.tag }}"
           body: |
             📦 **APK size: ${{ steps.apk.outputs.apk_size }}**
