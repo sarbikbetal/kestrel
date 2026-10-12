@@ -26,7 +26,7 @@ No account, no API key, no subscription.
 ## Stack
 
 Kotlin · Jetpack Compose (Material 3 Expressive) · CameraX · Dual rotation-vector sensors ·
-FusedLocationProvider · Retrofit · DataStore · osmdroid
+platform LocationManager · Retrofit · DataStore · osmdroid
 
 ## Build
 
