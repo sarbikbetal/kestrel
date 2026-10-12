@@ -1,0 +1,21 @@
+Kestrel is an ADS-B plane-spotter that shows live air traffic around you.
+
+Point your phone at the sky and the augmented-reality view labels the aircraft
+overhead — on a synthetic sky or over the live camera feed — with callsign,
+altitude, speed, and distance. A map view shows all nearby traffic with
+size-class-coloured markers, and selecting a plane shows its altitude and
+speed graphs plus route details.
+
+Features:
+
+* AR sky view (synthetic sky or live camera) driven by the phone's sensors
+* Live map of nearby aircraft with recenter and layer controls
+* Per-plane detail panel with altitude/speed history graphs
+* Multiple map tile sources and three themes (Material You, Astro Red, Avionics Green)
+* Imperial/metric units and configurable data radius
+
+All data comes from free, keyless community APIs (adsb.lol) and open map tile
+servers. No accounts, no ads, no tracking.
+
+Location is used to center the sky/map on you. Camera is only used when you
+switch to the live-camera AR view.

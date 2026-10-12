@@ -105,7 +105,6 @@ dependencies {
     implementation(libs.okhttp.logging)
     implementation(libs.kotlinx.serialization.json)
 
-    implementation(libs.play.services.location)
     implementation(libs.osmdroid.android)
     implementation(libs.accompanist.permissions)
     implementation(libs.androidx.datastore.preferences)

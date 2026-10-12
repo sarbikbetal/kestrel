@@ -60,4 +60,4 @@ Release builds fall back to debug signing when `keystore.properties` is absent.
 
 ## License
 
-MIT
+GPL-3.0-only — see [LICENSE](LICENSE).
