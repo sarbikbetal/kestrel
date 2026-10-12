@@ -30,7 +30,7 @@ import com.sarbikbetal.kestrel.settings.AppTheme
 
 // ── Astro Red ────────────────────────────────────────────────────────────────
 // OLED black background, deep astronomy red primaries, amber-orange accents.
-// No whites, blues, or greens — optimised for night-sky viewing.
+// No whites, blues, or greens - optimised for night-sky viewing.
 private val AstroRedScheme = darkColorScheme(
     primary                 = Color(0xFFCC1100),
     onPrimary               = Color(0xFF1A0000),
@@ -106,7 +106,7 @@ private val AvionicsGreenScheme = darkColorScheme(
     scrim                   = Color(0xFF000000),
 )
 
-// Monospaced typography for Avionics Green only — maps to the system monospace
+// Monospaced typography for Avionics Green only - maps to the system monospace
 // font (Droid Mono / Roboto Mono) for a flight-computer feel.
 // All other themes use the default Typography() so spacing and proportions
 // remain consistent when the user switches between them.
@@ -156,7 +156,7 @@ private val SharpShapes = Shapes(
 val LocalAppTheme = staticCompositionLocalOf { AppTheme.MATERIAL_YOU }
 
 // Desaturate → invert → keep only the red channel.
-// Result: dark base map with bright-red roads/labels — classic astronomical red-light mode.
+// Result: dark base map with bright-red roads/labels - classic astronomical red-light mode.
 val ASTRO_RED_MAP_FILTER: ColorMatrixColorFilter = ColorMatrixColorFilter(
     ColorMatrix(
         floatArrayOf(
@@ -170,7 +170,7 @@ val ASTRO_RED_MAP_FILTER: ColorMatrixColorFilter = ColorMatrixColorFilter(
 
 private val ScanlineColor = Color.Black.copy(alpha = 0.22f)
 
-// CRT scanline overlay — one dark band every 6px, 3px wide.
+// CRT scanline overlay - one dark band every 6px, 3px wide.
 // Wider gap + thicker stroke makes the raster pattern visually distinct.
 // ponytail: Offset is a value class (no heap allocation). Drawn once per layout
 // pass, not per sensor frame, so negligible perf cost.
@@ -210,7 +210,7 @@ fun KestrelTheme(
         AppTheme.AVIONICS_GREEN -> AvionicsGreenScheme
     }
 
-    // Only Avionics Green changes the typeface — shapes and typography are
+    // Only Avionics Green changes the typeface - shapes and typography are
     // identical between Material You and Astro Red so layout stays stable.
     val typography = if (appTheme == AppTheme.AVIONICS_GREEN) MonoTypography else Typography()
     val shapes     = if (appTheme == AppTheme.AVIONICS_GREEN) SharpShapes    else ExpressiveShapes

@@ -45,7 +45,7 @@ class RouteRepository(
                 if (now - entry.fetchedAtMs < TTL_MS) return@runCatching entry.details
             }
 
-            // Aircraft info (operator name + full model) is always from hexdb — best-effort.
+            // Aircraft info (operator name + full model) is always from hexdb - best-effort.
             val acInfo = try { fetchAircraftInfo(hex) } catch (e: Exception) { AircraftInfo(null, null) }
 
             // Route: try primary source, fall back to secondary on any error.

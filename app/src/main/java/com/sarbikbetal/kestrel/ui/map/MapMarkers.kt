@@ -14,42 +14,9 @@ import com.sarbikbetal.kestrel.ui.TrackedPlane
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
+import kotlin.math.cos
 import kotlin.math.roundToInt
-
-/**
- * A non-rotating hollow ring drawn under the selected aircraft as a selection
- * halo. Hollow so the plane icon stays visible through the centre.
- */
-fun selectionMarker(map: MapView, colorArgb: Int): Marker =
-    Marker(map).apply {
-        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-        icon = selectionRingIcon(map.context, colorArgb)
-        isFlat = true
-        setInfoWindow(null)
-        setOnMarkerClickListener { _, _ -> false }
-    }
-
-private fun selectionRingIcon(context: Context, colorArgb: Int): BitmapDrawable {
-    val density = context.resources.displayMetrics.density
-    val sizePx = (56f * density).roundToInt()
-    val stroke = 3f * density
-    val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(bitmap)
-    val c = sizePx / 2f
-    val radius = c - stroke
-    val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        style = android.graphics.Paint.Style.FILL
-        color = (colorArgb and 0x00FFFFFF) or 0x22000000 // ~13% alpha tint
-    }
-    val ring = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        style = android.graphics.Paint.Style.STROKE
-        strokeWidth = stroke
-        color = colorArgb
-    }
-    canvas.drawCircle(c, c, radius, fill)
-    canvas.drawCircle(c, c, radius, ring)
-    return BitmapDrawable(context.resources, bitmap)
-}
+import kotlin.math.sin
 
 fun userMarker(map: MapView, point: GeoPoint): Marker =
     Marker(map).apply {
@@ -82,14 +49,17 @@ fun planeMarker(
     plane: TrackedPlane,
     prefs: UserPrefs,
     iconScale: Float = 1f,
+    selected: Boolean = false,
     onSelect: ((String) -> Unit)? = null,
 ): Marker = Marker(map).apply {
     position = GeoPoint(plane.lat, plane.lon)
     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
 
     val sizeClass = PlaneSize.classify(plane.aircraft.category)
-    val dp = markerSizeDp(sizeClass, plane.aircraft.altitudeMeters) * iconScale
-    icon = scaledPlaneIcon(map.context, sizeClass.colorArgb.toInt(), dp)
+    // Selected planes render at 1.4× size with a contrasting outline around their usual colour.
+    val scale = if (selected) iconScale * 1.4f else iconScale
+    val dp = markerSizeDp(sizeClass, plane.aircraft.altitudeMeters) * scale
+    icon = scaledPlaneIcon(map.context, sizeClass.colorArgb.toInt(), dp, if (selected) SELECTED_STROKE else null)
 
     isFlat = true
     plane.aircraft.headingDeg?.let { rotation = (-it).toFloat() }
@@ -128,19 +98,37 @@ private fun markerSizeDp(sizeClass: PlaneSizeClass, altitudeMeters: Double): Flo
     return (22f * sizeFactor * altFactor).coerceIn(15f, 46f)
 }
 
-// Rendering vectors to bitmaps is costly, so cache by tint + rounded size.
+private const val SELECTED_STROKE = 0xFF000000.toInt()
+private const val STROKE_DP = 2f
+
+// Rendering vectors to bitmaps is costly, so cache by tint + stroke + rounded size.
 private val iconCache = HashMap<String, BitmapDrawable>()
 
-private fun scaledPlaneIcon(context: Context, colorArgb: Int, sizeDp: Float): BitmapDrawable {
-    val px = (sizeDp * context.resources.displayMetrics.density).roundToInt().coerceAtLeast(1)
-    val key = "$colorArgb@$px"
+private fun scaledPlaneIcon(context: Context, colorArgb: Int, sizeDp: Float, strokeArgb: Int? = null): BitmapDrawable {
+    val density = context.resources.displayMetrics.density
+    val px = (sizeDp * density).roundToInt().coerceAtLeast(1)
+    val key = "$colorArgb/$strokeArgb@$px"
     iconCache[key]?.let { return it }
 
+    // Outline = the silhouette stamped in the stroke colour around a ring of offsets,
+    // then the normal coloured icon on top. Works for any vector shape.
+    val pad = if (strokeArgb != null) (STROKE_DP * density).roundToInt() else 0
     val vector = ContextCompat.getDrawable(context, R.drawable.ic_map_plane)!!.mutate()
+    val bitmap = Bitmap.createBitmap(px + 2 * pad, px + 2 * pad, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    if (strokeArgb != null) {
+        vector.setTint(strokeArgb)
+        for (k in 0 until 16) {
+            val a = k * Math.PI / 8
+            val dx = (pad * cos(a)).roundToInt()
+            val dy = (pad * sin(a)).roundToInt()
+            vector.setBounds(pad + dx, pad + dy, pad + dx + px, pad + dy + px)
+            vector.draw(canvas)
+        }
+    }
     vector.setTint(colorArgb)
-    vector.setBounds(0, 0, px, px)
-    val bitmap = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
-    vector.draw(Canvas(bitmap))
+    vector.setBounds(pad, pad, pad + px, pad + px)
+    vector.draw(canvas)
 
     return BitmapDrawable(context.resources, bitmap).also { iconCache[key] = it }
 }

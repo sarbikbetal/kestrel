@@ -26,7 +26,7 @@ jobs:
           cache: gradle            # caches ~/.gradle between runs
 
       # ── Versioning ──────────────────────────────────────────────────────────
-      - name: Compute next semver patch
+      - name: Compute next semver minor
         id: semver
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -36,8 +36,8 @@ jobs:
             latest="v0.0.0"
           fi
           version="${latest#v}"
-          IFS='.' read -r major minor patch <<< "$version"
-          new_tag="v${major}.${minor}.$((patch + 1))"
+          IFS='.' read -r major minor _ <<< "$version"
+          new_tag="v${major}.$((minor + 1)).0"
           new_version="${new_tag#v}"
           echo "tag=${new_tag}" >> "$GITHUB_OUTPUT"
           echo "version=${new_version}" >> "$GITHUB_OUTPUT"
@@ -74,11 +74,18 @@ jobs:
       - name: Build release APK
         run: ./gradlew assembleRelease --no-daemon --stacktrace -PVERSION_NAME=${{ steps.semver.outputs.version }}
       # ── Package ──────────────────────────────────────────────────────────────
-      - name: Rename APK
+      - name: Rename APK and measure size
+        id: apk
         run: |
+          APK_SRC="app/build/outputs/apk/release/app-release.apk"
           APK_NAME="Kestrel-${{ steps.semver.outputs.tag }}.apk"
-          cp app/build/outputs/apk/release/app-release.apk "${APK_NAME}"
+          cp "${APK_SRC}" "${APK_NAME}"
           echo "apk_name=${APK_NAME}" >> "$GITHUB_ENV"
+
+          # Human-readable size (e.g. "7.2 MB")
+          bytes=$(wc -c < "${APK_SRC}")
+          mb=$(awk "BEGIN {printf \"%.1f\", ${bytes}/1048576}")
+          echo "apk_size=${mb} MB" >> "$GITHUB_OUTPUT"
 
       # ── Release ──────────────────────────────────────────────────────────────
       - name: Create GitHub release
@@ -86,5 +93,7 @@ jobs:
         with:
           tag_name: ${{ steps.semver.outputs.tag }}
           name: "Kestrel ${{ steps.semver.outputs.tag }}"
-          generate_release_notes: true   # auto-fills body from merged PRs / commits
+          body: |
+            📦 **APK size: ${{ steps.apk.outputs.apk_size }}**
+          generate_release_notes: true   # appended after body by the action
           files: ${{ env.apk_name }}

@@ -21,7 +21,7 @@ private fun wrap180(deg: Double): Double {
 /**
  * Where the back camera is pointing, in world terms.
  *  - [azimuthDeg]        heading from TYPE_GAME_ROTATION_VECTOR (accel+gyro only).
- *                        Stable for sky/AR rendering — immune to magnetic interference.
+ *                        Stable for sky/AR rendering - immune to magnetic interference.
  *                        Not compass-calibrated; use [compassBearingDeg] for true north.
  *  - [elevationDeg]      angle above the horizon (0 = level, 90 = straight up)
  *  - [rollDeg]           rotation about the viewing axis, used to keep overlays upright
@@ -46,7 +46,7 @@ class OrientationProvider(context: Context) {
         context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
 
     // TYPE_GAME_ROTATION_VECTOR: accel + gyro only, no magnetometer.
-    // Stable for rendering — immune to magnetic interference.
+    // Stable for rendering - immune to magnetic interference.
     // Falls back to TYPE_ROTATION_VECTOR on devices that lack the game sensor.
     private val gameSensor: Sensor? =
         sensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)

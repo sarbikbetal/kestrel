@@ -29,9 +29,18 @@ object MapTiles {
         "© OpenStreetMap contributors, Humanitarian OSM Team",
     )
 
+    // ponytail: memomaps is a free, no-API-key OSM public-transport tile server.
+    private val transport: ITileSource = XYTileSource(
+        "OSMTransport",
+        0, 19, 256, ".png",
+        arrayOf("https://tileserver.memomaps.de/tilegen/"),
+        "© OpenStreetMap contributors, MemOMaps",
+    )
+
     fun source(type: MapType): ITileSource = when (type) {
         MapType.STANDARD -> TileSourceFactory.MAPNIK
         MapType.TERRAIN -> terrain
         MapType.HUMANITARIAN -> humanitarian
+        MapType.TRANSPORT -> transport
     }
 }

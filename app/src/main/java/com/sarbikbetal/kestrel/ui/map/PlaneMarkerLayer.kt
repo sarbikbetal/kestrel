@@ -17,24 +17,33 @@ class PlaneMarkerLayer(
 ) {
     private val markers = HashMap<String, Marker>()
     private var lastPrefs: UserPrefs? = null
+    private var lastSelectedHex: String? = null
 
     fun sync(
         planes: List<TrackedPlane>,
         prefs: UserPrefs,
+        selectedHex: String? = null,
         cap: Int = Int.MAX_VALUE,
         onSelect: ((String) -> Unit)? = null,
     ) {
         val prefsChanged = prefs != lastPrefs
+        val prevSelectedHex = lastSelectedHex
+        val selectionChanged = selectedHex != prevSelectedHex
         lastPrefs = prefs
+        lastSelectedHex = selectedHex
         val seen = HashSet<String>()
 
         planes.take(cap).forEach { p ->
             val hex = p.aircraft.hex
             seen += hex
             val existing = markers[hex]
-            val marker = if (existing == null || prefsChanged) {
+            // Rebuild only when: new marker, prefs changed, or this hex transitions
+            // in/out of being selected (avoids rebuilding all markers on every tap).
+            val needsRebuild = existing == null || prefsChanged ||
+                (selectionChanged && (hex == selectedHex || hex == prevSelectedHex))
+            val marker = if (needsRebuild) {
                 existing?.let { map.overlays.remove(it) }
-                planeMarker(map, p, prefs, iconScale, onSelect).also {
+                planeMarker(map, p, prefs, iconScale, selected = hex == selectedHex, onSelect).also {
                     markers[hex] = it
                     map.overlays.add(it)
                 }
@@ -59,5 +68,6 @@ class PlaneMarkerLayer(
         markers.values.forEach { map.overlays.remove(it) }
         markers.clear()
         lastPrefs = null
+        lastSelectedHex = null
     }
 }

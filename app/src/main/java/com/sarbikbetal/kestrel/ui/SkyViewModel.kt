@@ -202,9 +202,20 @@ class SkyViewModel(app: Application) : AndroidViewModel(app) {
             tracked
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    // Selection is the source of truth for `selectedHex`: _trace is only reset after the
+    // in-flight (non-cancellable) network fetch returns, which used to leave the sheet
+    // stuck open - and its close button inert - while data was still loading.
+    private val selectedTrace: Flow<TraceState> = combine(_trace, _selectedHex) { t, h ->
+        when {
+            h == null -> TraceState()
+            t.hex == h -> t
+            else -> TraceState(hex = h, loading = true)
+        }
+    }
+
     // Bundles the less-frequent signals so the main combine stays within 5 flows.
     private val misc: Flow<Misc> =
-        combine(_error, _pollStatus, _trace, _route, _locationServicesEnabled) { err, poll, trace, route, enabled ->
+        combine(_error, _pollStatus, selectedTrace, _route, _locationServicesEnabled) { err, poll, trace, route, enabled ->
             Misc(error = err, poll = poll, trace = trace, route = route, locationServicesEnabled = enabled)
         }
 

@@ -11,7 +11,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -37,7 +40,7 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
-// Plane silhouette centered at (0,0), scale 1.1f baked in — allocated once.
+// Plane silhouette centered at (0,0), scale 1.1f baked in - allocated once.
 private val PLANE_PATH: Path = Path().apply {
     val s = 2f
     moveTo(  0f * s, -16f * s)
@@ -53,7 +56,7 @@ private val PLANE_PATH: Path = Path().apply {
     close()
 }
 
-// Off-screen hint arrow: tip at (0,0) pointing up, base 26 px below — allocated once.
+// Off-screen hint arrow: tip at (0,0) pointing up, base 26 px below - allocated once.
 private val HINT_ARROW_PATH: Path = Path().apply {
     moveTo(0f, 0f); lineTo(-14f, 26f); lineTo(14f, 26f); close()
 }
@@ -108,6 +111,8 @@ fun SkyOverlay(
     selectedHex: String?,
     onSelect: (String?) -> Unit,
     modifier: Modifier = Modifier,
+    /** Called with the hex of the plane under the crosshair, or null when none. */
+    onFocusChange: (String?) -> Unit = {},
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val planeStroke = colorScheme.surface
@@ -121,6 +126,10 @@ fun SkyOverlay(
     // Tracks the single plane closest to the crosshair (null = none within threshold).
     val nearHexState = remember { mutableStateOf<String?>(null) }
     val tagScale = remember { Animatable(1f) }
+    val curOnFocusChange by rememberUpdatedState(onFocusChange)
+    LaunchedEffect(Unit) {
+        snapshotFlow { nearHexState.value }.collect { curOnFocusChange(it) }
+    }
     LaunchedEffect(nearHexState.value) {
         val expanding = nearHexState.value != null
         tagScale.animateTo(
@@ -240,7 +249,7 @@ fun SkyOverlay(
                 } else {
                     drawPlaneEntry(
                         tracked.aircraft.hex, pos, color, screenRot, selected,
-                        selectionRing, planeStroke, labels[i], 1f,
+                        planeStroke, labels[i], 1f,
                         tagBg, tagBorder, titlePaint, subPaint, hitTargets,
                     )
                 }
@@ -253,7 +262,8 @@ fun SkyOverlay(
                         bearingDeg = proj.bearingFromCenterDeg,
                         span = min(w, h),
                         color = selectionRing,
-                        scale = 1.7f,
+                        scale = 2.2f,
+                        selected = true,
                     )
                 } else if (hintsDrawn < 6) {
                     drawOffScreenHint(
@@ -271,7 +281,7 @@ fun SkyOverlay(
         focused?.let { f ->
             drawPlaneEntry(
                 f.hex, f.pos, f.color, f.screenRot, f.selected,
-                selectionRing, planeStroke, f.label, tagScale.value,
+                planeStroke, f.label, tagScale.value,
                 tagBg, tagBorder, titlePaint, subPaint, hitTargets,
                 addFirst = true,
             )
@@ -283,6 +293,9 @@ fun SkyOverlay(
         }
     }
 }
+
+private const val SELECTED_ICON_SCALE = 1.4f
+private val SELECTED_HINT_STROKE = Stroke(width = 4f, join = androidx.compose.ui.graphics.StrokeJoin.Round)
 
 private fun DrawScope.drawReticle(center: Offset) {
     val r = 26f
@@ -301,7 +314,6 @@ private fun DrawScope.drawPlaneEntry(
     color: Color,
     screenRot: Float?,
     selected: Boolean,
-    selectionRing: Color,
     planeStroke: Color,
     label: PlaneLabel,
     scale: Float,
@@ -312,9 +324,16 @@ private fun DrawScope.drawPlaneEntry(
     hitTargets: MutableList<PlaneHit>,
     addFirst: Boolean = false,
 ) {
-    if (selected) drawCircle(selectionRing, radius = 42f, center = pos, style = Stroke(3f))
-    if (screenRot != null) drawPlaneIcon(pos, screenRot, color, stroke = planeStroke)
-    else drawCircle(color, radius = 16f, center = pos)
+    // Icon grows at half the tag's rate so focus reads without the plane overwhelming the sky.
+    // Selected: bigger icon with a white outline (mirrors the map view's selected plane).
+    val iconScale = (1f + (scale - 1f) * 0.5f) * (if (selected) SELECTED_ICON_SCALE else 1f)
+    val stroke = if (selected) Color.White else planeStroke
+    if (screenRot != null) drawPlaneIcon(pos, screenRot, color, stroke = stroke, scale = iconScale)
+    else {
+        val rad = 16f * iconScale
+        if (selected) drawCircle(stroke, radius = rad + 3f, center = pos)
+        drawCircle(color, radius = rad, center = pos)
+    }
     val tag = drawTag(pos, label.title, label.line1, label.line2, color, tagBg, tagBorder, titlePaint, subPaint, scale)
     val hit = PlaneHit(hex = hex, iconPos = pos, iconRadius = 40f, tag = tag)
     if (addFirst) hitTargets.add(0, hit) else hitTargets.add(hit)
@@ -322,11 +341,13 @@ private fun DrawScope.drawPlaneEntry(
 
 // ponytail: PLANE_PATH is a module-level val; translate+rotate avoids per-frame Path allocs.
 // pivot = Offset.Zero rotates around the translated origin (= pos on screen).
-private fun DrawScope.drawPlaneIcon(pos: Offset, rotationDeg: Float, color: Color, stroke: Color) {
+private fun DrawScope.drawPlaneIcon(pos: Offset, rotationDeg: Float, color: Color, stroke: Color, scale: Float) {
     translate(left = pos.x, top = pos.y) {
-        rotate(degrees = rotationDeg, pivot = Offset.Zero) {
-            drawPath(PLANE_PATH, color)
-            drawPath(PLANE_PATH, stroke, style = ICON_STROKE)
+        scale(scale, pivot = Offset.Zero) {
+            rotate(degrees = rotationDeg, pivot = Offset.Zero) {
+                drawPath(PLANE_PATH, color)
+                drawPath(PLANE_PATH, stroke, style = ICON_STROKE)
+            }
         }
     }
 }
@@ -433,12 +454,24 @@ private fun DrawScope.drawOffScreenHint(
     span: Float,
     color: Color,
     scale: Float = 1f,
+    selected: Boolean = false,
 ) {
     val radius = span * 0.42f
     rotate(degrees = bearingDeg, pivot = center) {
         translate(left = center.x, top = center.y - radius) {
             scale(scale = scale, pivot = Offset(0f, 13f)) {
-                drawPath(HINT_ARROW_PATH, color.copy(alpha = 0.9f))
+                if (selected) {
+                    // Selected: solid, white-outlined, double chevron (a second arrow trails
+                    // the first) so it can't be mistaken for the faint generic hints.
+                    translate(top = 16f) {
+                        drawPath(HINT_ARROW_PATH, Color.White, style = SELECTED_HINT_STROKE)
+                        drawPath(HINT_ARROW_PATH, color)
+                    }
+                    drawPath(HINT_ARROW_PATH, Color.White, style = SELECTED_HINT_STROKE)
+                    drawPath(HINT_ARROW_PATH, color)
+                } else {
+                    drawPath(HINT_ARROW_PATH, color.copy(alpha = 0.9f))
+                }
             }
         }
     }

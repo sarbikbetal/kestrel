@@ -6,7 +6,15 @@ import android.widget.Toast
 import android.graphics.Typeface
 import android.os.SystemClock
 import android.provider.Settings
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -17,6 +25,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,6 +44,7 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.MediumFloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -40,9 +52,13 @@ import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -57,7 +73,12 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import android.os.Build
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.compose.ui.unit.dp
 import com.sarbikbetal.kestrel.sensors.DeviceOrientation
 import com.sarbikbetal.kestrel.settings.AppTheme
@@ -88,6 +109,16 @@ fun ArSkyScreen(
     val showCamera = skyViewMode == SkyViewMode.CAMERA && hasCameraPermission
 
     val ctx = LocalContext.current
+
+    // The HUD is always dark, so force light status-bar icons while the AR view is shown.
+    val view = LocalView.current
+    DisposableEffect(view) {
+        val window = (view.context as? android.app.Activity)?.window
+        val controller = window?.let { WindowCompat.getInsetsController(it, view) }
+        val wasLight = controller?.isAppearanceLightStatusBars
+        controller?.isAppearanceLightStatusBars = false
+        onDispose { wasLight?.let { controller.isAppearanceLightStatusBars = it } }
+    }
     val openLocationSettings = {
         ctx.startActivity(
             Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
@@ -100,10 +131,16 @@ fun ArSkyScreen(
         if (!state.locationIsStale) return@LaunchedEffect
         Toast.makeText(
             ctx,
-            "Using last known location — tap the GPS icon to enable location services",
+            "Using last known location - tap the GPS icon to enable location services",
             Toast.LENGTH_LONG,
         ).show()
     }
+
+    // Plane under the crosshair. `infoHex` keeps the last value so the button's
+    // outro animation still has a target while `focusedHex` is already null.
+    var focusedHex by remember { mutableStateOf<String?>(null) }
+    var infoHex by remember { mutableStateOf<String?>(null) }
+    if (focusedHex != null) infoHex = focusedHex
 
     Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (showCamera) {
@@ -134,13 +171,15 @@ fun ArSkyScreen(
             selectedHex = state.selectedHex,
             onSelect = onSelectPlane,
             modifier = Modifier.fillMaxSize(),
+            onFocusChange = { focusedHex = it },
         )
 
         Column(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.safeDrawing),
+                // Top inset is handled inside HudCompass so its scrim fills the status bar.
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
         ) {
             HudCompass(state = state, orientation = orientation)
 
@@ -182,9 +221,32 @@ fun ArSkyScreen(
                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                     shape = FloatingActionButtonDefaults.smallShape,
                 ) {
-                    Icon(Icons.Filled.GpsOff, contentDescription = "Location not enabled — tap to turn on")
+                    Icon(Icons.Filled.GpsOff, contentDescription = "Location not enabled - tap to turn on")
                 }
             }
+            AnimatedVisibility(
+                visible = focusedHex != null && state.selectedHex == null,
+                enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
+                exit = scaleOut() + fadeOut(),
+            ) {
+                MediumFloatingActionButton(
+                    onClick = { infoHex?.let(onSelectPlane) },
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    shape = FloatingActionButtonDefaults.mediumShape,
+                ) {
+                    Icon(Icons.Filled.Info, contentDescription = "Plane info", modifier = Modifier.size(FloatingActionButtonDefaults.MediumIconSize))
+                }
+            }
+        }
+
+        // View switcher: top-left, just below the HUD (92dp tape + status-bar inset).
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(start = 16.dp, top = 92.dp + 8.dp),
+        ) {
             val (toggleIcon, toggleDesc) = if (skyViewMode == SkyViewMode.CAMERA) {
                 Icons.Filled.AutoAwesome to "Switch to synthetic sky"
             } else {
@@ -269,13 +331,18 @@ private fun HudCompass(
     orientation: State<DeviceOrientation>,
     modifier: Modifier = Modifier,
 ) {
-    val cs = MaterialTheme.colorScheme
+    // Material You follows the system light/dark; the HUD sits over the camera/sky,
+    // so always use the dark scheme there. Other themes are already dark.
+    val context = LocalContext.current
+    val cs = if (LocalAppTheme.current == AppTheme.MATERIAL_YOU) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) dynamicDarkColorScheme(context) else darkColorScheme()
+    } else MaterialTheme.colorScheme
     val timeStr   = Formatters.clock(Date(), state.prefs.timeFormat)
     val countStr  = "${state.planes.size} ✈"
     // Theme-aware scrim: dark in dark mode, light in light mode (text uses onSurface).
     val scoopColor = cs.surface.copy(alpha = 0.72f)
 
-    // All Paint objects remembered — zero per-frame allocation in the draw block.
+    // All Paint objects remembered - zero per-frame allocation in the draw block.
     val primaryArgb   = cs.primary.toArgb()
     val dimArgb       = cs.onSurface.copy(alpha = 0.45f).toArgb()
     val onSurfArgb    = cs.onSurface.toArgb()
@@ -312,12 +379,14 @@ private fun HudCompass(
 
     Column(modifier = modifier) {
         // Single canvas: background shape + compass tape + info text.
-        Canvas(modifier = Modifier.fillMaxWidth().height(92.dp)) {
+        val topInset = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()
+        Canvas(modifier = Modifier.fillMaxWidth().height(92.dp + topInset)) {
             // Read orientation in the draw phase so a heading change repaints the tape
             // without recomposing HudCompass.
             val bearing = orientation.value.compassBearingDeg
+            val topPx = topInset.toPx()
             val w     = size.width
-            val h     = size.height
+            val h     = size.height - topPx
             val cx    = w / 2f
             val tapeH = 58.dp.toPx()
             val infoH = h - tapeH
@@ -337,6 +406,10 @@ private fun HudCompass(
                 lineTo(cx - scoopBotHW, h);   lineTo(0f, h)
                 close()
             }
+            // Fill the status-bar/cutout area above the HUD with the same scrim, then
+            // shift all further drawing below it.
+            drawRect(scoopColor, size = androidx.compose.ui.geometry.Size(w, topPx))
+            drawContext.canvas.translate(0f, topPx)
             drawPath(bgPath, scoopColor)
 
             // ── Compass tape ──────────────────────────────────────────────
@@ -366,7 +439,7 @@ private fun HudCompass(
                 }
             }
 
-            // Centre pointer — taller than cardinal ticks, marks current heading
+            // Centre pointer - taller than cardinal ticks, marks current heading
             drawLine(cs.primary, Offset(cx, 0f), Offset(cx, cardH + 6.dp.toPx()), 3f)
 
             // ── Info text in wings ────────────────────────────────────────
@@ -376,7 +449,7 @@ private fun HudCompass(
             nc.drawText(countStr, w - padX, infoBaseline, infoRPaint)
         }
 
-        // Error banner — only rendered when needed, outside the canvas.
+        // Error banner - only rendered when needed, outside the canvas.
         if (!state.sensorAvailable || state.error != null) {
             Text(
                 if (!state.sensorAvailable) "No rotation sensor" else state.error ?: "",
@@ -398,7 +471,7 @@ private fun SyntheticSky(
     val astroRed  = LocalAppTheme.current == AppTheme.ASTRO_RED
 
     // Stable star field: [azimuth 0..360°, elevation 0..80°, brightness 0..1].
-    // All three axes are locked to the sky — azimuth, elevation, and roll.
+    // All three axes are locked to the sky - azimuth, elevation, and roll.
     val stars = remember {
         val rng = Random(42)
         Array(150) { floatArrayOf(rng.nextFloat() * 360f, rng.nextFloat() * 80f, rng.nextFloat()) }
@@ -505,7 +578,7 @@ private fun SyntheticSky(
             }
         }
 
-        // Tilted horizon line — uses theme primary (already red in Astro Red)
+        // Tilted horizon line - uses theme primary (already red in Astro Red)
         drawLine(
             color       = primary.copy(alpha = 0.6f),
             start       = Offset(0f, leftHorizonY),

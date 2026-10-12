@@ -128,7 +128,7 @@ object SkyMath {
         val rawDx = dAz * pxPerDeg
         val rawDy = -dEl * pxPerDeg
 
-        // Apply roll rotation around screen centre — identical to star-field rotation.
+        // Apply roll rotation around screen centre - identical to star-field rotation.
         val r = Math.toRadians(deviceRollDeg)
         val cosR = cos(r); val sinR = sin(r)
         val rotDx = rawDx * cosR - rawDy * sinR

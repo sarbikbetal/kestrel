@@ -55,7 +55,7 @@ class AircraftRepository(
                         backoffMs = (retryAfterMs ?: (backoffMs * 2)).coerceIn(intervalMs, maxBackoffMs)
                         waitMs = backoffMs
                         Log.w(TAG, "Rate limited (429); backing off ${backoffMs}ms")
-                        emit(AircraftResult.Error("Rate limited — slowing updates", waitMs))
+                        emit(AircraftResult.Error("Rate limited - slowing updates", waitMs))
                     } else {
                         Log.w(TAG, "HTTP ${e.code()}: ${e.message}")
                         emit(AircraftResult.Error("Server error ${e.code()}", waitMs))
@@ -96,7 +96,7 @@ class AircraftRepository(
 
     companion object {
         private const val TAG = "AircraftRepository"
-        // Placeholder base URL — overridden per-call via @Url in AdsbApi.
+        // Placeholder base URL - overridden per-call via @Url in AdsbApi.
         private const val RETROFIT_BASE = "https://api.adsb.lol/"
 
         fun defaultApi(): AdsbApi {

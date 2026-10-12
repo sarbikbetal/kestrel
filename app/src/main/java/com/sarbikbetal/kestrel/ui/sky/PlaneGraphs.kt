@@ -1,7 +1,11 @@
 package com.sarbikbetal.kestrel.ui.sky
 
+import android.content.Context
+import android.content.Intent
 import android.graphics.Paint
+import android.net.Uri
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -48,7 +52,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sarbikbetal.kestrel.data.FlightDetails
@@ -112,6 +118,7 @@ fun PlaneDetailContent(
 ) {
     val callsign = selected?.aircraft?.callsign ?: fallbackTitle
     val airline = details?.airlineName
+    val context = LocalContext.current
 
     // Header is outside the scroll area so the close button is always hittable,
     // even during loading-induced recompositions.
@@ -130,7 +137,12 @@ fun PlaneDetailContent(
                 Text(
                     text = airline ?: if (detailsLoading) "Loading route…" else "Unknown operator",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (airline != null) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    textDecoration = if (airline != null) TextDecoration.Underline else null,
+                    modifier = if (airline != null) {
+                        Modifier.clickable { searchGoogle(context, "$airline airline") }
+                    } else Modifier,
                 )
             }
             if (showCloseButton) {
@@ -346,12 +358,16 @@ private fun FlightInfoGrid(selected: TrackedPlane?, details: FlightDetails?, pre
     val registration = country?.let { "${it.flag} ${it.name}" } ?: selected?.aircraft?.registration
     val speed        = Formatters.speed(selected?.aircraft?.groundSpeedKnots, prefs.speedUnit)
     val altitude     = selected?.aircraft?.altitudeMeters
-        ?.let { Formatters.altitude(it, prefs.altitudeUnit) } ?: "—"
+        ?.let { Formatters.altitude(it, prefs.altitudeUnit) } ?: "-"
 
     Column {
-        InfoRow("Aircraft",     model ?: "—")
+        val context = LocalContext.current
+        InfoRow(
+            "Aircraft", model ?: "-",
+            onClick = model?.let { { searchGoogle(context, "$it aircraft") } },
+        )
         HorizontalDivider()
-        InfoRow("Registration", registration ?: "—")
+        InfoRow("Registration", registration ?: "-")
         HorizontalDivider()
         InfoRow("Speed",        speed,    valueColor = MaterialTheme.colorScheme.tertiary)
         HorizontalDivider()
@@ -360,9 +376,17 @@ private fun FlightInfoGrid(selected: TrackedPlane?, details: FlightDetails?, pre
 }
 
 @Composable
-private fun InfoRow(label: String, value: String, valueColor: Color = MaterialTheme.colorScheme.onSurface) {
+private fun InfoRow(
+    label: String,
+    value: String,
+    valueColor: Color = MaterialTheme.colorScheme.onSurface,
+    onClick: (() -> Unit)? = null,
+) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -371,7 +395,8 @@ private fun InfoRow(label: String, value: String, valueColor: Color = MaterialTh
             value,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
-            color = valueColor,
+            color = if (onClick != null) MaterialTheme.colorScheme.primary else valueColor,
+            textDecoration = if (onClick != null) TextDecoration.Underline else null,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.widthIn(max = 200.dp),
@@ -384,6 +409,11 @@ private fun InfoRow(label: String, value: String, valueColor: Color = MaterialTh
 private fun currentTripSamples(samples: List<TrackSample>): List<TrackSample> {
     val lastGround = samples.indexOfLast { it.altitudeMeters == 0.0 }
     return if (lastGround >= 0) samples.drop(lastGround + 1) else samples
+}
+
+private fun searchGoogle(context: Context, query: String) {
+    val url = "https://www.google.com/search?q=" + Uri.encode(query)
+    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
 }
 
 private fun airportCode(iata: String?, icao: String?): String = iata ?: icao ?: "???"
@@ -465,7 +495,7 @@ private fun Charts(samples: List<TrackSample>, prefs: UserPrefs) {
                 Readout("SPD", Formatters.speed(sel.speedKnots, prefs.speedUnit), speedColor)
                 Readout(
                     "ALT",
-                    sel.altitudeMeters?.let { Formatters.altitude(it, prefs.altitudeUnit) } ?: "—",
+                    sel.altitudeMeters?.let { Formatters.altitude(it, prefs.altitudeUnit) } ?: "-",
                     altColor,
                 )
                 Spacer(Modifier.weight(1f))

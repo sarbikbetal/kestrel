@@ -20,6 +20,7 @@ enum class MapType(val label: String) {
     HUMANITARIAN("Humanitarian"),
     STANDARD("Political"),
     TERRAIN("Terrain"),
+    TRANSPORT("Transport"),
 }
 
 enum class PositionSource(val label: String) {

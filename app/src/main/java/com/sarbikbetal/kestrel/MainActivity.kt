@@ -83,7 +83,7 @@ private fun PlaneSpotterApp() {
                 viewModel = viewModel,
                 settingsViewModel = settingsViewModel,
                 hasCameraPermission = cameraPerm.status.isGranted,
-                // Called only when the user explicitly switches to camera view — not on startup.
+                // Called only when the user explicitly switches to camera view - not on startup.
                 onRequestCameraPermission = {
                     if (!cameraPerm.status.isGranted) cameraPerm.launchPermissionRequest()
                 },

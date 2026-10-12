@@ -321,7 +321,7 @@ private fun AboutGroup(modifier: Modifier = Modifier) {
         runCatching {
             @Suppress("DEPRECATION")
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        }.getOrNull().orEmpty().ifEmpty { "—" }
+        }.getOrNull().orEmpty().ifEmpty { "-" }
     }
     val openUrl: (String) -> Unit = { url ->
         runCatching {
