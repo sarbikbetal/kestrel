@@ -86,6 +86,25 @@ jobs:
           echo "${SDK_ROOT}/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "${SDK_ROOT}/platform-tools"            >> "$GITHUB_PATH"
 
+      # ── Signing ──────────────────────────────────────────────────────────────
+      # Real release key (needed for F-Droid reproducible builds); fail loudly if missing
+      # rather than silently shipping a debug-signed APK.
+      - name: Restore release keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          [[ -n "$KEYSTORE_B64" ]] || { echo "::error::RELEASE_KEYSTORE_B64 secret is not set"; exit 1; }
+          echo "$KEYSTORE_B64" | base64 -d > release.keystore
+          {
+            echo "storeFile=release.keystore"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > keystore.properties
+
       # ── Build ────────────────────────────────────────────────────────────────
       - name: Build release APK
         run: ./gradlew assembleRelease --no-daemon --stacktrace

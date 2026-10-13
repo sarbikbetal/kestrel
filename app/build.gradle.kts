@@ -71,6 +71,11 @@ android {
     buildFeatures {
         compose = true
     }
+    // Google's signed dependency blob is not reproducible (and F-Droid rejects it).
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
