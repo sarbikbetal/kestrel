@@ -91,12 +91,12 @@ jobs:
       # rather than silently shipping a debug-signed APK.
       - name: Restore release keystore
         env:
-          KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          [[ -n "$KEYSTORE_B64" ]] || { echo "::error::RELEASE_KEYSTORE_B64 secret is not set"; exit 1; }
+          [[ -n "$KEYSTORE_B64" ]] || { echo "::error::KEYSTORE_BASE64 secret is not set"; exit 1; }
           echo "$KEYSTORE_B64" | base64 -d > release.keystore
           {
             echo "storeFile=release.keystore"
